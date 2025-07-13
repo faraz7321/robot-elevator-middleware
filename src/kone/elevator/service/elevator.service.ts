@@ -93,6 +93,7 @@ export class ElevatorService {
             webSocketConnection.on('message', (data: string) => {
                 try {
                     const parsed = JSON.parse(data);
+                    console.log(parsed)
                     if (parsed.callType === 'action' && parsed.data?.request_id === requestId) {
                         const res = new BaseResponseDTO();
                         if (parsed.data?.success) {
@@ -103,8 +104,6 @@ export class ElevatorService {
                             res.errmsg = "FAILURE"
                         }
                         resolve(res);
-                    } else {
-                        console.log(parsed)
                     }
                 } catch (err) {
                     reject(err);
