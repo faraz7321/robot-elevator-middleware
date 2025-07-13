@@ -10,7 +10,7 @@ import {ListElevatorsRequestDTO} from "../dtos/list/ListElevatorsRequestDTO";
 import {ListElevatorsResponseDTO} from "../dtos/list/ListElevatorsResponseDTO";
 
 @Controller("lift")
-export class DeviceController {
+export class ElevatorController {
     constructor(private readonly elevatorService: ElevatorService) {}
 
     @Post("list")
