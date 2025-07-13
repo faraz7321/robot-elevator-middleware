@@ -1,11 +1,7 @@
 import {IsString, IsArray, IsOptional, IsNumber, Length, IsNotEmpty} from 'class-validator';
-import {BaseRequestDTO} from "../../../baseDtos/BaseRequestDTO";
+import {DeviceBaseRequestDTO} from "../DeviceBaseRequestDTO";
 
-export class BindDeviceRequestDTO extends BaseRequestDTO{
-    @IsString()
-    @Length(24, 24)
-    @IsNotEmpty()
-    deviceUuid: string;
+export class BindDeviceRequestDTO extends DeviceBaseRequestDTO{
 
     @IsArray()
     liftNos: number[];

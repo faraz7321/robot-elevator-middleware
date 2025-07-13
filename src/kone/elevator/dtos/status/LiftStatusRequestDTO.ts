@@ -1,21 +1,9 @@
-import {BaseRequestDTO} from "../../../baseDtos/BaseRequestDTO";
+import {DeviceBaseRequestDTO} from "../../../device/dto/DeviceBaseRequestDTO";
 import {IsNotEmpty, IsNumber, IsString, Length} from "class-validator";
+import {ElevatorBaseRequest} from "../ElevatorBaseRequest";
 
 
-export class LiftStatusRequestDTO extends BaseRequestDTO{
-
-    @IsString()
-    @Length(24, 24)
-    @IsNotEmpty()
-    deviceUuid: string;
-
-    @IsNumber()
-    @IsNotEmpty()
-    liftNo: number;
-
-    @IsString()
-    @IsNotEmpty()
-    placeId: string;
-
+export class LiftStatusRequestDTO extends ElevatorBaseRequest {
+    // nothing to add
 
 }
