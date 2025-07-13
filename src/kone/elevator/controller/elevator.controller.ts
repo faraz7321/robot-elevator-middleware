@@ -33,8 +33,8 @@ export class ElevatorController {
   }
 
   @Post('open')
-  delayElevator(@Body() request: DelayDoorRequestDTO): BaseResponseDTO {
-    return this.elevatorService.delayElevator(request);
+  delayElevatorDoors(@Body() request: DelayDoorRequestDTO): BaseResponseDTO {
+    return this.elevatorService.delayElevatorDoors(request);
   }
 
   @Post('lock')
