@@ -15,6 +15,7 @@ import {
   ResumeSessionPayload,
   WebSocketResumeSessionResponse,
 } from './types';
+import {AccessTokenData} from "../auth/dto/AccessTokenData";
 
 /**
  * Variables that contain the main endpoints used in this demo project.
@@ -51,7 +52,7 @@ export async function fetchAccessToken(
   clientId: string,
   clientSecret: string,
   scopes?: string[],
-): Promise<AccessToken> {
+): Promise<any> {
   const requestConfig: AxiosRequestConfig = {
     method: 'POST',
     url: API_AUTH_TOKEN_ENDPOINT_V2,
@@ -73,9 +74,8 @@ export async function fetchAccessToken(
     console.log(`Access token: ${JSON.stringify(requestResult.data)}`);
 
     // get the accessToken from the response
-    const accessToken = requestResult.data.access_token;
+    return requestResult.data;
 
-    return accessToken;
   } catch (authError) {
     let errorMsg = 'Error fetching the access token';
 

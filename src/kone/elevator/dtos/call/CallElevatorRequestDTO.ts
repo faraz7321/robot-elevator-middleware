@@ -21,5 +21,8 @@ export class CallElevatorRequestDTO extends ElevatorBaseRequest {
   @IsNumber()
   @IsNotEmpty()
   private _toFloor: number;
+
+  @IsNumber()
+  @IsNotEmpty()
   private _fromFloor: number;
 }
