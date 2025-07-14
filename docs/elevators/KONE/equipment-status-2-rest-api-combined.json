@@ -1,0 +1,1317 @@
+{
+  "openapi" : "3.0.1",
+  "info" : {
+    "description" : "The Equipment Status API provides you information about the availability, status data,\nand movement status of KONE and NON-KONE equipment. To use the REST API, a prerequisite is to first create a webhook subscription. \nWebhook subscriptions are managed using the [Webhook Management API](https://dev.kone.com/api-portal/dashboard/api-documentation/webhook-management-api).\n",
+    "title" : "Equipment Status API - REST API",
+    "version" : "v2"
+  },
+  "servers" : [ {
+    "url" : "https://dev.kone.com"
+  } ],
+  "security" : [ {
+    "OpenID" : [ "" ]
+  } ],
+  "paths" : {
+    "/api/v2/equipment/search/availability" : {
+      "post" : {
+        "description" : "Get information about the last known availability status of KONE and NON-KONE equipment available through KONE connectivity devices. \nThe availability is a high-level state of equipment describing whether the equipment is currently used or not. \nThe availability data is quite simple but can be used as a foundational building block to build more advanced applications. \nAvailability supports KONE elevators, escalators and NON-KONE elevators.\n",
+        "operationId" : "getEquipmentAvailabilityByIds",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "example" : {
+                "equipmentIds" : [ "ken:100554477" ]
+              },
+              "schema" : {
+                "$ref" : "#/components/schemas/EquipmentRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "example" : [ {
+                  "equipmentId" : "ken:100554477",
+                  "lastUpdate" : "2021-08-09T01:20:42.531Z",
+                  "state" : "InService",
+                  "previousState" : "OutOfService",
+                  "serviceMode" : "OutOfService",
+                  "devices" : [ {
+                    "deviceId" : "t_9626_sample_id",
+                    "status" : "Disconnected",
+                    "deviceType" : "anylift",
+                    "connectionTime" : "2021-08-02T01:20:42.531Z"
+                  } ],
+                  "equipmentInfo" : {
+                    "equipmentNumber" : "100554477",
+                    "serialNumber" : "123456789",
+                    "customerEquipmentLocationId" : "BAT 1",
+                    "customerEquipmentNumber" : "E1212",
+                    "type" : "Elevator",
+                    "city" : [ "Espoo" ],
+                    "countryCode" : "FI",
+                    "street" : "Keilasatama 3",
+                    "district" : "KOL",
+                    "postalCode" : "02150",
+                    "houseNumber" : "64",
+                    "name" : [ "KONE Building" ],
+                    "region" : "UUSIMAA"
+                  }
+                } ],
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/AvailabilityResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "Availability information for the equipment queried. The number of items returned can be less or equal than the number of items queried."
+          },
+          "204" : {
+            "description" : "No events found (device connectivity or communication error)"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "message" : "Request body is required"
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              }
+            },
+            "description" : "Missing or invalid request body"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "message" : "Token does not contain required scopes. Required: [rtmv2/ken:100554477]. Had: [rtmv2/ken:123456789]"
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              }
+            },
+            "description" : "Required scopes are missing. Note that the token must contain valid scopes for all requested pieces of equipment."
+          }
+        },
+        "security" : [ {
+          "OpenID" : [ "rtm/ken:{equipmentId}" ]
+        } ],
+        "summary" : "Get equipment availability information",
+        "tags" : [ "Availability" ]
+      }
+    },
+    "/api/v2/equipment/search/status" : {
+      "post" : {
+        "description" : "Get information that are used to determine equipment's current status updated as part of maintenance activity. Status Information type supports both KONE and NON-KONE equipments.\n",
+        "operationId" : "getEquipmentEntrapmentByIds",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "example" : {
+                "equipmentIds" : [ "ken:100554477" ]
+              },
+              "schema" : {
+                "$ref" : "#/components/schemas/EquipmentRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "example" : [ {
+                  "equipmentId" : "ken:100554477",
+                  "entrapment" : true,
+                  "outOfOrder" : false,
+                  "status" : "ok",
+                  "equipmentStatus" : "Back-In-Order",
+                  "equipmentOutOfOrderDate" : "2022-07-25T21:01:57.000+0000",
+                  "equipmentBackInOrderDate" : "2022-07-25T21:06:57.000+0000",
+                  "equipmentLocationId" : "1311r000000QaXaAAK",
+                  "equipmentLocationDescription" : "KEF",
+                  "addressStreet" : "SQU HOPKINSON",
+                  "addressPostCode" : "13004",
+                  "addressCity" : "MARSEILLE",
+                  "addressCountry" : "FR",
+                  "equipmentType" : "Elevator",
+                  "customerEquipmentLocationId" : "BAT 1",
+                  "equipmentNumber" : "000000000010243222",
+                  "customerEquipmentNumber" : "E823175",
+                  "equipmentFunctionalLocation" : "FL00016278",
+                  "equipmentFunctionalLocationDescription" : "Marseille",
+                  "maintenance" : {
+                    "status" : "Work is ongoing"
+                  }
+                } ],
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/EntrapmentResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "Status of the equipment queried. The number of items returned can be less or equal than the number of items queried."
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "message" : "Request body is required"
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              }
+            },
+            "description" : "Missing or invalid request body"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "message" : "Token does not contain required scopes. Required: [rtmv2/ken:100554477]. Had: [rtmv2/ken:123456789]"
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              }
+            },
+            "description" : "Required scopes are missing. Note that the token must contain valid scopes for all requested pieces of equipment."
+          }
+        },
+        "security" : [ {
+          "OpenID" : [ "rtm/ken:{equipmentId}" ]
+        } ],
+        "summary" : "Get equipment status information",
+        "tags" : [ "Entrapment" ]
+      }
+    },
+    "/api/v2/equipment/search/movement" : {
+      "post" : {
+        "description" : "Get movement information of KONE and NON-KONE equipment. Most equipment provide event only when its movement stops. Some equipment also provide event\nwhenever its movement starts. Whether an event is about movement start or stop, it is indicated in the response. Movement supports both KONE and NON-KONE elevators.\n",
+        "operationId" : "getEquipmentMovementByIds",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "example" : {
+                "equipmentIds" : [ "ken:100554477" ]
+              },
+              "schema" : {
+                "$ref" : "#/components/schemas/EquipmentRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "examples" : {
+                  "example1" : {
+                    "value" : [ {
+                      "equipmentId" : "ken:100554477",
+                      "lastUpdate" : "2021-08-09T01:20:42.531Z",
+                      "distanceMeters" : 39.279,
+                      "durationSeconds" : 20.248,
+                      "mode" : "Normal",
+                      "stopMode" : "Normal",
+                      "movementEventType" : "MovementCompleted",
+                      "timeStamp" : "2021-08-09T01:20:02.511Z",
+                      "decks" : [ {
+                        "deckIndex" : 1,
+                        "startFloor" : {
+                          "floorIndex" : 4,
+                          "marking" : "2"
+                        },
+                        "stopFloor" : {
+                          "floorIndex" : 1,
+                          "marking" : "P2"
+                        },
+                        "loadPercentage" : 8,
+                        "estimatedPersons" : 2
+                      } ],
+                      "equipmentInfo" : {
+                        "equipmentNumber" : "100554477",
+                        "serialNumber" : "123456789",
+                        "customerEquipmentNumber" : "E1212",
+                        "customerEquipmentLocationId" : "BAT 1",
+                        "type" : "Elevator",
+                        "city" : [ "Espoo" ],
+                        "countryCode" : "FI",
+                        "street" : "Keilasatama 3",
+                        "postalCode" : "02150",
+                        "houseNumber" : "64",
+                        "name" : [ "KONE Building" ],
+                        "region" : "UUSIMA",
+                        "district" : "KOL"
+                      }
+                    } ]
+                  },
+                  "example2" : {
+                    "value" : [ {
+                      "equipmentId" : "ken:10078815",
+                      "lastUpdate" : "2023-02-14T04:41:15.000Z",
+                      "timeStamp" : "2023-02-14T04:41:10.000Z",
+                      "decks" : [ {
+                        "deckIndex" : 1,
+                        "startFloor" : {
+                          "floorIndex" : 3,
+                          "marking" : "3"
+                        },
+                        "stopFloor" : {
+                          "floorIndex" : 4,
+                          "marking" : 4
+                        },
+                        "loadPercentage" : 39
+                      } ],
+                      "mode" : "Normal",
+                      "movementEventType" : "MovementCompleted",
+                      "durationSeconds" : 18,
+                      "equipmentInfo" : { }
+                    }, {
+                      "equipmentId" : "ken:10078815",
+                      "lastUpdate" : "2023-03-28T04:12:23.000Z",
+                      "timeStamp" : "2023-03-28T04:12:20.000Z",
+                      "decks" : [ {
+                        "deckIndex" : 1,
+                        "startFloor" : {
+                          "floorIndex" : 1,
+                          "marking" : "1"
+                        },
+                        "stopFloor" : {
+                          "floorIndex" : 3,
+                          "marking" : 3
+                        },
+                        "loadPercentage" : 34
+                      } ],
+                      "mode" : "Normal",
+                      "movementEventType" : "MovementCompleted",
+                      "durrationSeconds" : 15,
+                      "equipmentInfo" : { }
+                    }, {
+                      "equipmentId" : "ken:10078815",
+                      "lastUpdate" : "2023-03-07T07:13:25.000Z",
+                      "timeStamp" : "2023-03-07T07:13:20.000Z",
+                      "decks" : [ {
+                        "deckIndex" : 1,
+                        "startFloor" : {
+                          "floorIndex" : 2,
+                          "marking" : "2"
+                        },
+                        "stopFloor" : {
+                          "floorIndex" : 4,
+                          "marking" : 4
+                        },
+                        "loadPercentage" : 32
+                      } ],
+                      "mode" : "Normal",
+                      "movementEventType" : "MovementCompleted",
+                      "durationSeconds" : 15,
+                      "equipmentInfo" : { }
+                    } ]
+                  }
+                },
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/EquipmentMovementResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "Movement information for the equipment queried. The number of items returned can be less or equal than the number of items queried. For some kens multipal responses can be received are shown in Response example 2."
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "message" : "Request body is required"
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              }
+            },
+            "description" : "Missing or invalid request body"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "message" : "Token does not contain required scopes. Required: [rtmv2/ken:100554477]. Had: [rtmv2/ken:123456789]"
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              }
+            },
+            "description" : "Required scopes are missing. Note that the token must contain valid scopes for all requested pieces of equipment."
+          }
+        },
+        "security" : [ {
+          "OpenID" : [ "rtm/ken:{equipmentId}" ]
+        } ],
+        "summary" : "Get equipment movement information",
+        "tags" : [ "EquipmentMovement" ]
+      }
+    },
+    "/api/v2/equipment/escalator/movement/direction" : {
+      "post" : {
+        "description" : "This event delivers escalator speed and direction which direction the escalator is moving. It also displays previous direction, previous speed and braking distance also, It returns last saved events. ,**This event supported by KONE Escalators only**.\n",
+        "operationId" : "getEscalatorMovementByIds",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "example" : {
+                "equipmentIds" : [ "ken:100554477" ]
+              },
+              "schema" : {
+                "$ref" : "#/components/schemas/EscalatorEquipmentRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "example" : [ {
+                  "equipmentId" : "ken:100554477",
+                  "lastUpdate" : "2023-06-15T10:13:28.000Z",
+                  "statusChangeCode" : 5,
+                  "statusChangeDesc" : "Stop to slow speed",
+                  "previousSpeed" : 0,
+                  "currentSpeed" : 0.22,
+                  "currentDirectionCode" : 0,
+                  "currentDirectionDesc" : "Stopped",
+                  "previousDirectionCode" : 0,
+                  "previousDirectionDesc" : "Stopped",
+                  "brakingDistance" : 56,
+                  "serviceModeCode" : 1,
+                  "serviceModeDesc" : "No operation mode",
+                  "movementEventType" : "EscalatorMovement",
+                  "timestamp" : "2023-06-15T10:13:26.000Z",
+                  "equipmentInfo" : {
+                    "equipmentNumber" : "10078815",
+                    "serialNumber" : "123456789",
+                    "type" : "Escalator",
+                    "description" : "Keilasatama",
+                    "city" : [ "Espoo" ],
+                    "countryCode" : "FI",
+                    "postalCode" : "02150",
+                    "name" : [ "KONE Building" ],
+                    "street" : "Keilasatama 3"
+                  }
+                } ],
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/EscalatorMovementResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "It will return latest events for the escalator queried in request."
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "message" : "Request body is required"
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              }
+            },
+            "description" : "Missing or invalid request body"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "message" : "Token does not contain required scopes. Required: [rtmv2/ken:30118913]. Had: [rtmv2/ken:123456789]"
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              }
+            },
+            "description" : "Required scopes are missing. Note that the token must contain valid scopes for all requested pieces of equipment."
+          }
+        },
+        "security" : [ {
+          "OpenID" : [ "rtm/ken:{equipmentId}" ]
+        } ],
+        "summary" : "Get escalator movement information",
+        "tags" : [ "EscalatorMovement" ]
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "EquipmentId" : {
+        "description" : "KEN (KONE/ NON-KONE equipment number) for the equipment with ‘ken:’ prefix",
+        "example" : "ken:100554477",
+        "type" : "string"
+      },
+      "EscalatorEquipmentId" : {
+        "description" : "KEN (KONE equipment number) for the equipment with ‘ken:’ prefix",
+        "example" : "ken:100554477",
+        "type" : "string"
+      },
+      "EquipmentRequest" : {
+        "properties" : {
+          "equipmentIds" : {
+            "items" : {
+              "$ref" : "#/components/schemas/EquipmentId"
+            },
+            "maxLength" : 50,
+            "minLength" : 1,
+            "type" : "array"
+          }
+        },
+        "required" : [ "equipmentIds", "movementType" ],
+        "type" : "object"
+      },
+      "EquipmentMovementRequest" : {
+        "properties" : {
+          "equipmentIds" : {
+            "items" : {
+              "$ref" : "#/components/schemas/EquipmentId"
+            },
+            "maxLength" : 50,
+            "minLength" : 1,
+            "type" : "array"
+          }
+        },
+        "required" : [ "equipmentIds" ],
+        "type" : "object"
+      },
+      "EscalatorEquipmentRequest" : {
+        "properties" : {
+          "equipmentIds" : {
+            "items" : {
+              "$ref" : "#/components/schemas/EscalatorEquipmentId"
+            },
+            "maxLength" : 50,
+            "minLength" : 1,
+            "type" : "array"
+          }
+        },
+        "required" : [ "equipmentIds", "movementType" ],
+        "type" : "object"
+      },
+      "AvailabilityResponse" : {
+        "description" : "The `state` parameter defines the current availability state.",
+        "example" : {
+          "equipmentId" : "ken:100554477",
+          "lastUpdate" : "2021-08-09T01:20:42.531Z",
+          "state" : "InService"
+        },
+        "properties" : {
+          "equipmentId" : {
+            "$ref" : "#/components/schemas/EquipmentId"
+          },
+          "lastUpdate" : {
+            "description" : "ISO 8601 timestamp of when the availbility status last changed.",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "state" : {
+            "$ref" : "#/components/schemas/EquipmentState"
+          },
+          "previousState" : {
+            "$ref" : "#/components/schemas/EquipmentPreviousState"
+          },
+          "devices" : {
+            "description" : "Connectivity status of individual devices",
+            "items" : {
+              "$ref" : "#/components/schemas/AvailabilityResponse_devices_inner"
+            },
+            "type" : "array"
+          },
+          "serviceMode" : {
+            "description" : "The mode the equipment operates in.\nEnum descriptions:\n* `Normal` - Equipment in normal mode\n* `ServiceDriveMaintenance` - Equipment in service drive mode and operated by maintenance engineer\n* `TestDrive` - Equipment in test drive mode\n* `PitInspection` - Equipment pit undergoing inspection and out of service\n* `SafeWellAccess` - Equipment top / bottom well undergoing inspection\n* `Setup` - Equipment setup ongoing\n* `CarTest` - Equipment car test ongoing\n* `ScdSetup` - Equipment Static converter setup ongoing\n* `BarAdjust` - Equipment floor adjustment ongoing\n* `Synchronization` - Equipment synchronization ongoing\n* `FireFighter` - Equipment in fire mode, access only by fire fighters\n* `EmergencyPower` - Equipment currently using emergency power\n* `Attendant` - Equipment is being operated by an attendant inside the car\n* `Freight` - Equipment reserved for freight\n* `Parked` - Equipment at auto parking floor\n* `DopCs` - Equipment in test drive and door opening disabled\n* `OutOfService` - Equipment is non-functional and was set by a Destination Operating Panel\n* `OutOfServiceCar` - Equipment is non-functional and was set by a Car Operating Panel\n* `OutOfServiceLdg` - Equipment is non-functional and was set by a Landing Call Station\n* `OutOfServiceOpt` - Equipment is non-functional and was set by a Digital Input/Output panel\n* `PriorityCall` - Equipment only accept priority call\n* `PriorityCallPenthouse` - Equipment only accept priority call to specified penthouse floor\n* `PriorityCallPriorityLanding` - Equipment only accept priority call from a Landing Call Station\n* `PriorityCallCarLightFailed` - Equipment priority call indicator non functional in car\n* `PriorityCallVip` - Equipment only accept priority call for defined VIP\n* `PriorityCallHospitalEmergency` - Equipment only accept priority call for defined Hospital emergency\n* `PriorityCallHospitalBed` - Equipment only accept priority call for Hospital bed transportation\n* `PriorityCallPriorityLandingHigh` - Equipment only accept priority call from a Landing Call Station with higher priority\n* `PriorityCallPriorityLandingLow` - Equipment only accept priority call from a Landing Call Station with lower priority\n* `PriorityCallHospitalInCar` - Equipment only accept priority call for defined Hospital emergency activated in the car\n* `ResE` - Equipment running at reduced speed\n* `Fpo` - Equipment removed from group operation\n* `H4` - Equipment floor adjustment H4 mode\n* `PrlH*HelMes` - Equipment only accept priority call for defined Hospital emergency activated at elevator landing\n* `EarthQuake` - Equipment in earthquake mode and accepting no calls\n* `FastRecall` - Equipment recalled to specified floor and accepting no calls\n* `LiftClosed` - Equipment non functional and closed for maintenance\n* `EtslFailure` - Equipment emergency terminal speed limiting failed\n* `NtsFailure` - Equipment normal terminal stopping failed\n* `Evacuation` - Equipment being used only for non-fire evacuation\n* `OssPending` - Equipment waiting to enter non functional mode\n* `Invasion` - Equipment immobilized on an invasion floor\n* `Aes` - Equipment in an automatic serving mode\n* `Gateway` - Equipment IoT gateway failure\n* `Fid` - Equipment is non functional due to detected fire\n* `Rdf` - Equipment controlled with a recall system and not accepting any calls\n* `Pendant` - Equipment in pendant mode for limited testing\n* `NoSetup` - Equipment has no or incomplete setup\n* `Idle` - Equipment in idle mode\n* `Ebd` - Equipment controlled by emergency battery\n* `Wsc` - Equipment non functional due to water detected at the base or top\n* `WscMa` - Equipment non functional due to water detected at the machine room\n* `ReserveDispatch` - Equipment dispatched due to abnormal condition\n* `SpecialMode` - Equipment in predefined special mode\n* `ExtendedDoorOpenTime` - Equipment door opening extended\n* `AutomaticallyGuidedVehicle` - Equipment switched to AGV mode and not accepting other calls\n* `HighWindOperation` - Equipment mode changed due to high wind\n* `StormOperation` - Equipment mode changed due to storm\n* `ReducedSpeed` - Equipment running at reduced speed\n* `CarCleaningCap` - Equipment switched to cleaning priority and not accepting other calls\n* `CarCleaningCam` - Equipment switched to cleaning mode and not accepting other calls\n* `MainsFailure` - Equipment power lost\n* `NoOperation` - Equipment non functional, reason unspecified\n* `Automatic` - Equipment in an automatic serving mode\n* `Inspection` - Equipment in inspection drive mode and undergoing inspection\n* `Continuous` - Equipment in continuous serving mode\n* `TwoDirection` - Equipment serving mode for intensive two-peak\n* `EnergySaving` - Equipment in energy saving mode\n* `Start` - Equipment start usage pending\n* `Construct` - Equipment in construction time usage mode\n* `Mrt` - Equipment machine room temperature detection activated\n* `Other` - Equipment in other unspecified state\n",
+            "enum" : [ "Normal", "ServiceDriveMaintenance", "TestDrive", "PitInspection", "SafeWellAccess", "Setup", "CarTest", "ScdSetup", "BarAdjust", "Synchronization", "FireFighter", "EmergencyPower", "Attendant", "Freight", "Parked", "DopCs", "OutOfService", "OutOfServiceCar", "OutOfServiceLdg", "OutOfServiceOpt", "PriorityCall", "PriorityCallPenthouse", "PriorityCallPriorityLanding", "PriorityCallCarLightFailed", "PriorityCallVip", "PriorityCallHospitalEmergency", "PriorityCallHospitalBed", "PriorityCallPriorityLandingHigh", "PriorityCallPriorityLandingLow", "PriorityCallHospitalInCar", "ResE", "Fpo", "H4", "PrlH*HelMes", "EarthQuake", "FastRecall", "LiftClosed", "EtslFailure", "NtsFailure", "Evacuation", "OssPending", "Invasion", "Aes", "Gateway", "Fid", "Rdf", "Pendant", "NoSetup", "Idle", "Ebd", "Wsc", "WscMa", "ReserveDispatch", "SpecialMode", "ExtendedDoorOpenTime", "AutomaticallyGuidedVehicle", "HighWindOperation", "StormOperation", "ReducedSpeed", "CarCleaningCap", "CarCleaningCam", "MainsFailure", "NoOperation", "Automatic", "Inspection", "Continuous", "TwoDirection", "EnergySaving", "Start", "Construct", "Mrt", "Other" ],
+            "type" : "string"
+          },
+          "equipmentInfo" : {
+            "$ref" : "#/components/schemas/EquipmentInfo"
+          }
+        },
+        "required" : [ "equipmentId", "lastUpdate", "state" ],
+        "type" : "object"
+      },
+      "EntrapmentResponse" : {
+        "description" : "The `entrapment` paremter defines the current entrapment status of the equipment",
+        "properties" : {
+          "equipmentId" : {
+            "$ref" : "#/components/schemas/EquipmentId"
+          },
+          "entrapment" : {
+            "description" : "Indication that someone is inside an elevator after it's operation stopped",
+            "example" : true,
+            "type" : "boolean"
+          },
+          "outOfOrder" : {
+            "description" : "Equipment’s operational status based on if there is a service order booked for the equipment needing a repair",
+            "example" : true,
+            "type" : "boolean"
+          },
+          "status" : {
+            "description" : "This is based on the previous and indicates if the equipment is operational or not",
+            "enum" : [ "ok", "out" ],
+            "type" : "string"
+          },
+          "equipmentStatus" : {
+            "description" : "Represents the state of an equipment which is updated by a technician as a part of callout or by a KC3 agent before raising a callout",
+            "enum" : [ "Back-In-Order", "Out-Of-Order" ],
+            "type" : "string"
+          },
+          "equipmentOutOfOrderDate" : {
+            "description" : "Date when the equipment was out of order",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "equipmentBackInOrderDate" : {
+            "description" : "Date when the equipment was back in working state",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "equipmentLocationId" : {
+            "description" : "It is the information of an equipment's location",
+            "type" : "string"
+          },
+          "equipmentLocationDescription" : {
+            "description" : "It is a short description of an equipment's location",
+            "type" : "string"
+          },
+          "addressStreet" : {
+            "description" : "Name of street where equipment is located",
+            "type" : "string"
+          },
+          "addressPostCode" : {
+            "description" : "Postal code of place where equipment is located",
+            "type" : "string"
+          },
+          "addressCity" : {
+            "description" : "Name of city where equipment is located",
+            "type" : "string"
+          },
+          "addressCountry" : {
+            "description" : "Name of country where equipment is located",
+            "type" : "string"
+          },
+          "equipmentType" : {
+            "description" : "Type of equipment",
+            "type" : "string"
+          },
+          "customerEquipmentLocationId" : {
+            "description" : "It is an inventory number which is assigned to different sub parts of an equipment for Asset Accounting mostly used for reporting and tracing purpose",
+            "type" : "string"
+          },
+          "equipmentNumber" : {
+            "description" : "Number that belongs to KONE or NON-KONE which uniquely identifies an equipment",
+            "type" : "string"
+          },
+          "customerEquipmentNumber" : {
+            "description" : "Unique id provided by a customer as an internal identification of the equipment within their system",
+            "type" : "string"
+          },
+          "equipmentFunctionalLocation" : {
+            "description" : "Number allocated to a geographical mapping within which an equipment is located",
+            "type" : "string"
+          },
+          "equipmentFunctionalLocationDescription" : {
+            "description" : "Description of the geographical mapping within which an equipment is located",
+            "type" : "string"
+          },
+          "maintenance" : {
+            "$ref" : "#/components/schemas/maintenance"
+          }
+        },
+        "required" : [ "entrapment", "equipmentId" ],
+        "type" : "object"
+      },
+      "EquipmentMovementResponse" : {
+        "example" : {
+          "equipmentId" : "ken:100554477",
+          "lastUpdate" : "2021-08-09T01:20:42.531Z",
+          "distanceMeters" : 39.279,
+          "durationSeconds" : 20.248,
+          "mode" : "Normal",
+          "stopMode" : "Normal",
+          "movementEventType" : "MovementCompleted",
+          "decks" : [ {
+            "deckIndex" : 1,
+            "startFloor" : {
+              "floorIndex" : 4,
+              "marking" : "2"
+            },
+            "stopFloor" : {
+              "floorIndex" : 1,
+              "marking" : "P2"
+            },
+            "loadPercentage" : 8,
+            "estimatedPersons" : 2
+          } ]
+        },
+        "properties" : {
+          "equipmentId" : {
+            "$ref" : "#/components/schemas/EquipmentId"
+          },
+          "lastUpdate" : {
+            "description" : "Latest time when the event was updated",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "movementEventType" : {
+            "description" : "It indicates whether this event regarding equipment's movement stops.\nEnum descriptions:\n* `MovementCompleted` - Equipment completed its movement. All fields can be part of the message.\n",
+            "enum" : [ "MovementCompleted" ],
+            "type" : "string"
+          },
+          "timeStamp" : {
+            "description" : "ISO 8601 timestamp of when the movement status last changed.",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "decks" : {
+            "items" : {
+              "$ref" : "#/components/schemas/EquipmentMovementResponse_decks_inner"
+            },
+            "type" : "array"
+          },
+          "mode" : {
+            "$ref" : "#/components/schemas/ElevatorServiceMode"
+          },
+          "stopMode" : {
+            "$ref" : "#/components/schemas/ElevatorStopMode"
+          },
+          "distanceMeters" : {
+            "description" : "Distance in meters that the elevator travelled during the journey.",
+            "type" : "number"
+          },
+          "durationSeconds" : {
+            "description" : "Duration in seconds that the journey took.",
+            "type" : "number"
+          },
+          "equipmentInfo" : {
+            "$ref" : "#/components/schemas/EquipmentInfo"
+          }
+        },
+        "required" : [ "decks", "equipmentId", "lastUpdate", "movementEventType", "timeStamp" ],
+        "type" : "object"
+      },
+      "ElevatorDoorEventResponse" : {
+        "example" : [ {
+          "equipmentId" : "ken:100554477",
+          "timestamp" : "2023-04-19T12:36:11.335+03:00",
+          "doorOpenStartedTime" : "2023-04-19T12:36:01.401+03:00",
+          "doorClosedTime" : "2023-04-19T12:36:11.333+03:00",
+          "doorSideCode" : 0,
+          "doorSideDesc" : "B",
+          "deckIndexDesc" : "Upper Deck",
+          "floor" : 0,
+          "floorMarking" : "G",
+          "loadBeforeDoorOpen" : 0,
+          "loadAfterDoorClose" : 1,
+          "modeDesc" : "normal",
+          "modeCode" : 0,
+          "openingDuration" : 3.56,
+          "closingDuration" : 3.597,
+          "closingModeCode" : 0,
+          "closingModeDesc" : "normal",
+          "reopensByPhotoCell" : 0,
+          "reopensByDOB" : 0,
+          "equipmentInfo" : {
+            "customerEquipmentNumber" : "5454545",
+            "equipmentNumber" : "10078815",
+            "serialNumber" : "123456789",
+            "type" : "Elevator",
+            "description" : "Keilasatama",
+            "city" : "Espoo",
+            "countryCode" : "FI",
+            "postalCode" : "02150",
+            "name" : "KONE Building",
+            "street" : "Keilasatama 3"
+          }
+        } ],
+        "properties" : {
+          "equipmentId" : {
+            "$ref" : "#/components/schemas/EquipmentId"
+          },
+          "lastUpdate" : {
+            "description" : "Latest time when the door event was updated",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "timestamp" : {
+            "description" : "ISO 8601 timestamp of when an elevator door opened or closed on site",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "doorOpenStartedTime" : {
+            "description" : "Time at which the door of an elevator opened",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "doorClosedTime" : {
+            "description" : "Time at which the door of an elevator closed",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "doorSideCode" : {
+            "description" : "Code representing the side of an elevator door\n Enum descriptions:\n* `1` - Describes side A of an elevator\n* `2` - Describes side B of an elevator\n",
+            "enum" : [ 1, 2 ],
+            "type" : "number"
+          },
+          "doorSideDesc" : {
+            "description" : "Description of the code representing the side of an elevator door",
+            "example" : "A",
+            "type" : "string"
+          },
+          "deckIndexDesc" : {
+            "description" : "Describes whether the index code of the deck is upper or lower",
+            "example" : "Upper Deck",
+            "type" : "string"
+          },
+          "floor" : {
+            "description" : "Represents the current floor of an elevator",
+            "example" : 0,
+            "type" : "number"
+          },
+          "floorMarking" : {
+            "description" : "Represents the floor marking of current floor",
+            "type" : "number"
+          },
+          "loadBeforeDoorOpen" : {
+            "description" : "Represents the load percentage of an elevator before the doors have opened",
+            "type" : "number"
+          },
+          "loadAfterDoorClose" : {
+            "description" : "Represents the load percentage of an elevator after the doors are closed",
+            "type" : "number"
+          },
+          "modeCode" : {
+            "description" : "Code representing the mode of an elevator\n\nexample: 0\n",
+            "type" : "number"
+          },
+          "modeDesc" : {
+            "$ref" : "#/components/schemas/ElevatorServiceMode"
+          },
+          "openingDuration" : {
+            "description" : "Time taken by an elevator in seconds to open its closed door",
+            "type" : "number"
+          },
+          "closingDuration" : {
+            "description" : "Time taken by an elevator in seconds to close its opened door",
+            "type" : "number"
+          },
+          "closingModeCode" : {
+            "description" : "Code representing the closing mode an elevator door\n\nEnum descriptions:\n* `0` - Normal close\n* `1` - Nudging close\n",
+            "example" : 0,
+            "type" : "number"
+          },
+          "closingModeDesc" : {
+            "description" : "Description of code representing the closing mode an elevator door",
+            "example" : "Normal Close",
+            "type" : "string"
+          },
+          "reopensByPhotoCell" : {
+            "description" : "Number of times an elevator door reopened due to Photocell Cut",
+            "type" : "number"
+          },
+          "reopensByDOB" : {
+            "description" : "Number of times of an elevator door reopened due to Door Open Button",
+            "type" : "number"
+          },
+          "equipmentInfo" : {
+            "$ref" : "#/components/schemas/EquipmentInfoButtonDoor"
+          }
+        },
+        "required" : [ "closingDuration", "closingModeCode", "closingModeDesc", "deckIndexDesc", "doorClosedTime", "doorOpenStartedTime", "doorSideCode", "doorSideDesc", "equipmentId", "equipmentInfo", "floor", "floorMarking", "lastUpdate", "modeCode", "modeDesc", "openingDuration", "reopensByDOB", "reopensByPhotoCell", "timestamp" ],
+        "type" : "object"
+      },
+      "ElevatorButtonEventResponse" : {
+        "example" : [ {
+          "equipmentId" : "ken:100554477",
+          "timestamp" : "2023-04-19T12:36:11.335+03:00",
+          "landingCallType" : {
+            "floor" : 1,
+            "side" : "A",
+            "direction" : "down"
+          },
+          "equipmentInfo" : {
+            "customerEquipmentNumber" : "5454545",
+            "equipmentNumber" : "10078815",
+            "serialNumber" : "123456789",
+            "type" : "Elevator",
+            "description" : "Keilasatama",
+            "city" : "Espoo",
+            "countryCode" : "FI",
+            "postalCode" : "02150",
+            "name" : "KONE Building",
+            "street" : "Keilasatama 3"
+          }
+        } ],
+        "properties" : {
+          "equipmentId" : {
+            "$ref" : "#/components/schemas/EquipmentId"
+          },
+          "lastUpdate" : {
+            "description" : "Latest time when the button event was updated",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "timestamp" : {
+            "description" : "ISO 8601 timestamp of when the button status of an elevator last changed",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "landingCallType" : {
+            "$ref" : "#/components/schemas/LandingCallType"
+          },
+          "equipmentInfo" : {
+            "$ref" : "#/components/schemas/EquipmentInfoButtonDoor"
+          }
+        },
+        "required" : [ "direction", "equipmentId", "equipmentInfo", "floor", "landingCallType", "lastUpdate", "side", "timestamp" ],
+        "type" : "object"
+      },
+      "EscalatorMovementResponse" : {
+        "properties" : {
+          "equipmentId" : {
+            "$ref" : "#/components/schemas/EscalatorEquipmentId"
+          },
+          "lastUpdate" : {
+            "description" : "Latest time when the event was updated",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "statusChangeCode" : {
+            "description" : "statusChangeDesc will be decided by code\n",
+            "enum" : [ "1", "2", "3", "4", "5", "6" ],
+            "type" : "string"
+          },
+          "statusChangeDesc" : {
+            "description" : "its value depends on statusChangeCode value\n\n1 - Full speed to slow speed\n\n2 - Full speed to stop\n\n3 - Slow speed to stop\n\n4 - Stop to full speed\n\n5 - Stop to slow speed\n\n6 - slow speed to Full speed\n",
+            "type" : "string"
+          },
+          "movementEventType" : {
+            "description" : "It indicates what is type of the movement done by an Escalator.\nEnum descriptions:\n* `EscalatorMovement` - Equipment is moving. All fields can be part of the message.\n",
+            "enum" : [ "EscalatorMovement" ],
+            "type" : "string"
+          },
+          "previousSpeed" : {
+            "description" : "previous speed in m/s",
+            "type" : "number"
+          },
+          "currentSpeed" : {
+            "description" : "current speed in m/s",
+            "type" : "number"
+          },
+          "currentDirectionCode" : {
+            "description" : "currentDirectionDesc will be one of below values\nEnum descriptions:\n* `0` - stopped\n* `1` - up\n* `2` - down\n",
+            "enum" : [ 0, 1, 2 ],
+            "type" : "number"
+          },
+          "currentDirectionDesc" : {
+            "description" : "Its value depends on currentDirectionCode",
+            "enum" : [ "stopped", "up", "down" ],
+            "type" : "string"
+          },
+          "previousDirectionCode" : {
+            "description" : "previousDirectionDesc will be one of below\nEnum descriptions:\n* `0` - stopped\n* `1` - up\n* `2` - down\n",
+            "enum" : [ 0, 1, 2 ],
+            "type" : "number"
+          },
+          "previousDirectionDesc" : {
+            "description" : "Its value depends on previousDirectionCode",
+            "enum" : [ "stopped", "up", "down" ],
+            "type" : "string"
+          },
+          "brakingDistance" : {
+            "description" : "This is distance in mm",
+            "type" : "number"
+          },
+          "serviceModeCode" : {
+            "description" : "serviceModeDesc will be decided by code\n",
+            "enum" : [ 1, 2, 3, 4, 5, 6 ],
+            "type" : "number"
+          },
+          "serviceModeDesc" : {
+            "description" : "This is a detailed description of the service mode as reflected in the service mode code. Correlating with the service mode code, the combinations are:\n\n  1 - no operation mode\n\n  2 - automatic mode\n\n  3 - inspection mode\n\n  4 - continuous mode\n\n  5 - two direction mode\n\n  6 - energy saving mode\nEnum descriptions:\n no operation mode - After power on ,no mode is selected due to which escalator can not be start by key switch.\n automatic mode - It remains in running state until a stop command is given or a safety device tripped.\n inspection mode -  Escalator is in inspection\n continuous mode - It keeps moving at its nominal speed until a stop command is given or a safety device tripped\n two direction mode - It allows the escalator to operate in both the upward and downward directions simultaneously depending on the intended flow of traffic.\n energy saving mode - when passenger detected escalator speed up to its nominal speed for running time then it reduced to standby speed until next passenger is detected\n",
+            "enum" : [ "no operation mode", "automatic mode", "inspection mode", "continuous mode", "two direction mode", "energy saving mode" ],
+            "type" : "string"
+          },
+          "timestamp" : {
+            "description" : "The time when escalator starts moving mentioned in ISO 8601 format",
+            "example" : "2021-08-09T01:20:42.531Z",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "equipmentInfo" : {
+            "$ref" : "#/components/schemas/EquipmentInfoEscalatorMovement"
+          }
+        },
+        "required" : [ "brakingDistance", "currentDirectionCode", "currentDirectionDesc", "currentSpeed", "equipmentId", "equipmentInfo", "lastUpdate", "movementEventType", "previousDirectionCode", "previousDirectionDesc", "previousSpeed", "serviceModeCode", "serviceModeDesc", "statusChangeCode", "statusChangeDesc", "timestamp" ],
+        "type" : "object"
+      },
+      "EquipmentState" : {
+        "description" : "Operational state of an equipment.\n\nEnum descriptions:\n* `InService` - Equipment is in service.\n* `OutOfService` - Equipment is out of service.\n* `MaintenanceOngoing` - Equipment is undergoing maintenance.\n* `Disconnected` - Equipment has been disconnected from the system. No events can be received.\n* `Unknown` - The state of equipment is not known. Device has not sent its first state or has reported an invalid state.\n",
+        "enum" : [ "InService", "Disconnected", "MaintenanceOngoing", "Unknown", "OutOfService" ],
+        "type" : "string"
+      },
+      "EquipmentPreviousState" : {
+        "description" : "Previous operational state of an equipment\n\nEnum descriptions:\n* `InService` - Equipment is in service.\n* `OutOfService` - Equipment is out of service.\n* `MaintenanceOngoing` - Equipment is undergoing maintenance.\n* `Disconnected` - Equipment has been disconnected from the system. No events can be received.\n* `Unknown` - The state of equipment is not known. Device has not sent its first state or has reported an invalid state.\n",
+        "enum" : [ "InService", "Disconnected", "MaintenanceOngoing", "Unknown", "OutOfService" ],
+        "type" : "string"
+      },
+      "DeviceType" : {
+        "description" : "Device type",
+        "enum" : [ "anylift", "dtu", "kcecpuc" ],
+        "type" : "string"
+      },
+      "Maintenance" : {
+        "description" : "The service order with highest priority for a specific equipment",
+        "properties" : {
+          "status" : {
+            "description" : "The state of the service order with highest priority for a specific equipment",
+            "enum" : [ "New work order", "Plan created", "Technician is on the way", "Work has started", "Work is ongoing", "Waiting for work to continue", "Technician has left the site", "Work order Completed" ],
+            "example" : "Work is ongoing",
+            "type" : "string"
+          },
+          "technicianComment" : {
+            "description" : "The feedback about the service order with highest priority for a specific equipment",
+            "example" : "We checked the operation of the control system. Upon leaving",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "Floor" : {
+        "properties" : {
+          "floorIndex" : {
+            "description" : "Zero-based index of the floor. With zero being the bottommost floor.",
+            "minimum" : 0,
+            "type" : "number"
+          },
+          "marking" : {
+            "description" : "Human readable marking of the floor.",
+            "type" : "string"
+          }
+        },
+        "required" : [ "floorIndex" ],
+        "type" : "object"
+      },
+      "ElevatorStopMode" : {
+        "description" : "The mode the elevator stopped in.\n\nEnum descriptions:\n* `Normal` - Elevator in normal mode  \n* `ServiceDriveMaintenance` - Equipment in service drive mode and operated by a maintenance engineer  \n* `Synchronization` - Equipment synchronization ongoing  \n* `FireFighter` - Equipment in fire mode, access only by firefighters  \n* `EmergencyPower` - Equipment currently using emergency power  \n* `Attendant` - Equipment is being operated by an attendant inside the car  \n* `Freight` - Equipment reserved for freight  \n* `Parked` - Equipment at the auto parking floor  \n* `Fpo` - Equipment removed from group operation  \n* `EarthQuake` - Equipment in earthquake mode and accepting no calls  \n* `FastRecall` - Equipment recalled to a specified floor and accepting no calls  \n* `LiftClosed` - Equipment non-functional and closed for maintenance  \n* `EtslFailure` - Equipment emergency terminal speed limiting failed  \n* `NtsFailure` - Equipment normal terminal stopping failed  \n* `Evacuation` - Equipment being used only for non-fire evacuation  \n* `Invasion` - Equipment immobilized on an invasion floor  \n* `MainsFailure` - Equipment power lost  \n* `DopCs` - Equipment in test drive and door opening disabled  \n* `OutOfService` - Equipment is non-functional and was set by a Destination Operating Panel  \n* `PriorityCall` - Equipment only accepts a priority call  \n* `ResE` - Equipment running at reduced speed  \n* `H4` - Equipment floor adjustment H4 mode  \n* `PrlH*HelMes` - Equipment only accepts a priority call for a defined Hospital emergency activated at the elevator landing  \n* `OssPending` - Equipment waiting to enter non-functional mode  \n* `Emergency` - Elevator in Emergency mode  \n* `Nts` - Elevator terminal stop\n",
+        "enum" : [ "Normal", "ServiceDriveMaintenance", "Synchronization", "FireFighter", "EmergencyPower", "Attendant", "Freight", "Parked", "Fpo", "EarthQuake", "FastRecall", "LiftClosed", "EtslFailure", "NtsFailure", "Evacuation", "Invasion", "MainsFailure", "DopCs", "OutOfService", "PriorityCall", "ResE", "H4", "PrlH*HelMes", "OssPending", "Emergency", "Nts" ],
+        "type" : "string"
+      },
+      "ElevatorServiceMode" : {
+        "description" : "The mode the elevator operates in.\n\nEnum descriptions:\n* `Normal` - Elevator in normal mode\n* `ServiceDriveMaintenance` - Equipment in service drive mode and operated by a maintenance engineer\n* `Synchronization` - Equipment synchronization ongoing\n* `FireFighter` - Equipment in fire mode, access only by firefighters\n* `EmergencyPower` - Equipment currently using emergency power\n* `Attendant` - Equipment is being operated by an attendant inside the car\n* `Freight` - Equipment reserved for freight\n* `Parked` - Equipment at the auto parking floor\n* `PriorityCall` - Equipment only accepts a priority call\n* `Fpo` - Equipment removed from group operation\n* `EarthQuake` - Equipment in earthquake mode and accepting no calls\n* `FastRecall` - Equipment recalled to a specified floor and accepting no calls\n* `LiftClosed` - Equipment non-functional and closed for maintenance\n* `EtslFailure` - Equipment emergency terminal speed limiting failed\n* `NtsFailure` - Equipment normal terminal stopping failed\n* `Evacuation` - Equipment being used only for non-fire evacuation\n* `Invasion` - Equipment immobilized on an invasion floor\n* `MainsFailure` - Equipment power lost\n* `DopCs` - Equipment in test drive and door opening disabled\n* `OutOfService` - Equipment is non-functional and was set by a Destination Operating Panel\n* `ResE` - Equipment running at reduced speed\n* `H4` - Equipment floor adjustment H4 mode\n* `PrlH*HelMes` - Equipment only accepts a priority call for a defined Hospital emergency activated at the elevator landing\n* `OssPending` - Equipment waiting to enter non-functional mode\n* `TestDrive` - Equipment in test drive mode\n* `Aes` - Equipment in an automatic serving mode\n* `PriorityCallPriorityLanding` - Equipment only accepts a priority call from a Landing Call Station\n* `OutOfServiceCar` - Equipment is non-functional and was set by a Car Operating Panel\n* `OutOfServiceLdg` - Equipment is non-functional and was set by a Landing Call Station\n* `OutOfServiceOpt` - Equipment is non-functional and was set by a Digital Input/Output panel\n* `Gateway` - Equipment IoT gateway failure\n* `PitInspection` - Equipment pit undergoing inspection and out of service\n* `SafeWellAccess` - Equipment top/bottom well undergoing inspection\n* `Fid` - Equipment is non-functional due to detected fire\n* `Rdf` - Equipment controlled with a recall system and not accepting any calls\n* `Setup` - Equipment setup ongoing\n* `PriorityCallCarLightFailed` - Equipment priority call indicator non-functional in the car\n* `Pendant` - Equipment in pendant mode for limited testing\n* `NoSetup` - Equipment has no or incomplete setup\n* `Idle` - Equipment in idle mode\n* `Mrt` - Equipment machine room temperature detection activated\n* `Ebd` - Equipment controlled by emergency battery\n* `Wsc` - Equipment non-functional due to water detected at the base or top\n* `WscMa` - Equipment non-functional due to water detected at the machine room\n* `PriorityCallVip` - Equipment only accepts a priority call for a defined VIP\n* `CarTest` - Equipment car test ongoing\n* `ScdSetup` - Equipment Static converter setup ongoing\n* `BarAdjust` - Equipment floor adjustment ongoing\n* `StormOperation` - Equipment mode changed due to storm\n* `ReducedSpeed` - Equipment running at reduced speed\n* `CarCleaningCap` - Equipment switched to cleaning priority and not accepting other calls\n* `CarCleaningCam` - Equipment switched to cleaning mode and not accepting other calls\n* `Other` - Equipment in another unspecified state\n",
+        "enum" : [ "Normal", "ServiceDriveMaintenance", "Synchronization", "FireFighter", "EmergencyPower", "Attendant", "Freight", "Parked", "PriorityCall", "Fpo", "EarthQuake", "FastRecall", "LiftClosed", "EtslFailure", "NtsFailure", "Evacuation", "Invasion", "MainsFailure", "DopCs", "OutOfService", "ResE", "H4", "PrlH*HelMes", "OssPending", "TestDrive", "Aes", "PriorityCallPriorityLanding", "OutOfServiceCar", "OutOfServiceLdg", "OutOfServiceOpt", "Gateway", "PitInspection", "SafeWellAccess", "Fid", "Rdf", "Setup", "PriorityCallCarLightFailed", "Pendant", "NoSetup", "Idle", "Mrt", "Ebd", "Wsc", "WscMa", "PriorityCallVip", "CarTest", "ScdSetup", "BarAdjust", "StormOperation", "ReducedSpeed", "CarCleaningCap", "CarCleaningCam", "Other" ],
+        "type" : "string"
+      },
+      "EquipmentInfo" : {
+        "description" : "Equipment information, for example location and description",
+        "properties" : {
+          "equipmentNumber" : {
+            "description" : "Equipment number",
+            "type" : "string"
+          },
+          "serialNumber" : {
+            "description" : "Equipment serial number",
+            "type" : "string"
+          },
+          "customerEquipmentLocationId" : {
+            "description" : "It is an inventory number which is assigned to different sub parts of an equipment for Asset Accounting mostly used for reporting and tracing purpose",
+            "type" : "string"
+          },
+          "customerEquipmentNumber" : {
+            "description" : "Unique id provided by customer as an internal identification of the equipment within their system.",
+            "type" : "string"
+          },
+          "type" : {
+            "description" : "type of equipment",
+            "enum" : [ "Building", "Autowalk", "Building Door", "Dumbwaiter", "Elevator", "Escalator", "Stairlift", "Facadator", "Marine Elevator", "Marine Escalator", "Other" ],
+            "type" : "string"
+          },
+          "city" : {
+            "description" : "City name",
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "countryCode" : {
+            "description" : "Country name",
+            "type" : "string"
+          },
+          "street" : {
+            "description" : "Street name",
+            "type" : "string"
+          },
+          "postalCode" : {
+            "description" : "Postal code",
+            "type" : "string"
+          },
+          "name" : {
+            "description" : "Address name",
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "region" : {
+            "description" : "Region name",
+            "type" : "string"
+          },
+          "district" : {
+            "description" : "District name",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "EquipmentInfoButtonDoor" : {
+        "description" : "Equipment information, for example location and description",
+        "properties" : {
+          "customerEquipmentNumber" : {
+            "description" : "Unique id provided by a customer as an internal identification of the equipment within their system",
+            "type" : "string"
+          },
+          "equipmentNumber" : {
+            "description" : "Number that belongs to KONE or NON-KONE which uniquely identifies an equipment",
+            "type" : "string"
+          },
+          "serialNumber" : {
+            "description" : "Equipment serial number",
+            "type" : "string"
+          },
+          "type" : {
+            "description" : "type of equipment",
+            "enum" : [ "Building", "Autowalk", "Building Door", "Dumbwaiter", "Elevator", "Escalator", "Stairlift", "Facadator", "Marine Elevator", "Marine Escalator", "Other" ],
+            "type" : "string"
+          },
+          "description" : {
+            "description" : "Description of the equipment",
+            "type" : "string"
+          },
+          "city" : {
+            "description" : "City name",
+            "type" : "string"
+          },
+          "countryCode" : {
+            "description" : "Country name",
+            "type" : "string"
+          },
+          "postalCode" : {
+            "description" : "Postal code",
+            "type" : "string"
+          },
+          "name" : {
+            "description" : "Address name",
+            "type" : "string"
+          },
+          "street" : {
+            "description" : "Street name",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "LandingCallType" : {
+        "properties" : {
+          "floor" : {
+            "description" : "Represents the current floor number",
+            "type" : "number"
+          },
+          "side" : {
+            "description" : "Represents the current side of an elevator",
+            "type" : "string"
+          },
+          "direction" : {
+            "description" : "Represents the current direction in which elevator is moving",
+            "type" : "string"
+          },
+          "type" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "floor" ],
+        "type" : "object"
+      },
+      "EquipmentInfoEscalatorMovement" : {
+        "description" : "Equipment information, for example location and description",
+        "properties" : {
+          "equipmentNumber" : {
+            "description" : "Unique identifer number of an equipment",
+            "type" : "string"
+          },
+          "serialNumber" : {
+            "description" : "Equipment serial number",
+            "type" : "string"
+          },
+          "type" : {
+            "description" : "type of equipment",
+            "enum" : [ "Escalator" ],
+            "type" : "string"
+          },
+          "city" : {
+            "description" : "City name",
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "countryCode" : {
+            "description" : "Country code",
+            "type" : "string"
+          },
+          "postalCode" : {
+            "description" : "Postal code",
+            "type" : "string"
+          },
+          "name" : {
+            "description" : "Address name",
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "street" : {
+            "description" : "Street name",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "maintenance" : {
+        "description" : "The service order with highest priority for a specific equipment",
+        "properties" : {
+          "status" : {
+            "description" : "The state of the service order with highest priority for a specific equipment",
+            "enum" : [ "New work order", "Plan created", "Technician is on the way", "Work has started", "Work is ongoing", "Waiting for work to continue", "Technician has left the site", "Work order Completed" ],
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "Error" : {
+        "description" : "Error",
+        "properties" : {
+          "message" : {
+            "description" : "Human readable description of an error",
+            "example" : "Something went wrong.",
+            "type" : "string"
+          },
+          "errors" : {
+            "description" : "A more detailed list of errors",
+            "items" : {
+              "$ref" : "#/components/schemas/DetailedError"
+            },
+            "type" : "array"
+          }
+        },
+        "required" : [ "message" ],
+        "type" : "object"
+      },
+      "DetailedError" : {
+        "description" : "Detailed error",
+        "properties" : {
+          "type" : {
+            "description" : "Type of the error, for user code to react to",
+            "type" : "string"
+          },
+          "bodyPath" : {
+            "description" : "path of the error in the body object, if request was json then this is a json path",
+            "type" : "string"
+          },
+          "urlPath" : {
+            "description" : "describes where in URL the error was",
+            "type" : "string"
+          },
+          "header" : {
+            "description" : "describes which header was wrong",
+            "type" : "string"
+          }
+        },
+        "required" : [ "type" ],
+        "type" : "object"
+      },
+      "AvailabilityResponse_devices_inner" : {
+        "properties" : {
+          "deviceId" : {
+            "description" : "Device ID",
+            "type" : "string"
+          },
+          "status" : {
+            "description" : "Connection status",
+            "enum" : [ "Connected", "Disconnected" ],
+            "type" : "string"
+          },
+          "deviceType" : {
+            "$ref" : "#/components/schemas/DeviceType"
+          },
+          "connectionTime" : {
+            "description" : "Connection time of device",
+            "format" : "datetime",
+            "type" : "string"
+          },
+          "disconnectReason" : {
+            "description" : "Reason for device disconnection",
+            "type" : "string"
+          }
+        },
+        "required" : [ "connectionTime", "deviceId", "deviceType", "status" ],
+        "type" : "object"
+      },
+      "EquipmentMovementResponse_decks_inner" : {
+        "properties" : {
+          "deckIndex" : {
+            "description" : "Zero-based index of the deck.",
+            "minimum" : 0,
+            "type" : "number"
+          },
+          "startFloor" : {
+            "$ref" : "#/components/schemas/Floor"
+          },
+          "stopFloor" : {
+            "$ref" : "#/components/schemas/Floor"
+          },
+          "loadPercentage" : {
+            "description" : "Percentage of the maximum load during the journey.",
+            "example" : 8,
+            "minimum" : 0,
+            "type" : "number"
+          },
+          "estimatedPersons" : {
+            "description" : "Estimated number of people in the elevator during the journey.",
+            "minimum" : 0,
+            "type" : "number"
+          }
+        },
+        "required" : [ "deckIndex" ],
+        "type" : "object"
+      }
+    },
+    "securitySchemes" : {
+      "OpenID" : {
+        "openIdConnectUrl" : "/api/v1/oauth2/.well-known/openid-configuration",
+        "type" : "openIdConnect"
+      }
+    }
+  }
+}

@@ -1,0 +1,555 @@
+{
+  "openapi" : "3.0.1",
+  "info" : {
+    "description" : "Service Info API Rest allows you to receive and inspect entire historical data related to enhanced KONE maintenance service information which can be integrated into your chosen building management systems and dashboards.\n",
+    "title" : "Service Info API",
+    "version" : "v2"
+  },
+  "servers" : [ {
+    "url" : "https://dev.kone.com"
+  } ],
+  "security" : [ {
+    "OpenID" : [ "" ]
+  } ],
+  "paths" : {
+    "/api/v2/equipment/{equipmentId}/serviceOrders" : {
+      "get" : {
+        "description" : "Lists information about the equipment’s entire maintenance history which includes recent as well as past data like activity types, dates, service order related fields that can be viewed using this endpoint. Now Service Info API supports KONE and NON-KONE equipment's (elevators, escalators).",
+        "operationId" : "getServiceOrdersByEquipmentId",
+        "parameters" : [ {
+          "description" : "KEN (KONE/ NON-KONE equipment number) for the equipment with `ken:` prefix",
+          "example" : "ken:100554477",
+          "explode" : false,
+          "in" : "path",
+          "name" : "equipmentId",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/EquipmentId"
+          },
+          "style" : "simple"
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "example" : [ {
+                  "activityType" : "Callout",
+                  "serviceOrderNumber" : "9AFI42695685",
+                  "customerEquipmentNumber" : "E823175",
+                  "workOrderNumber" : "9B0014666182",
+                  "customerServiceOrderId" : "64084997",
+                  "customerPurchaseOrderNumber" : "1911118",
+                  "createdDateTime" : "2018-09-06T20:23:46.000Z"
+                }, {
+                  "activityType" : "Maintenance",
+                  "serviceOrderNumber" : "9AFI42695685",
+                  "customerEquipmentNumber" : "E823175",
+                  "workOrderNumber" : "9B0164187446",
+                  "customerServiceOrderId" : "64084997",
+                  "customerPurchaseOrderNumber" : "1911118",
+                  "createdDateTime" : "2018-09-07T20:23:46.000Z"
+                } ],
+                "schema" : {
+                  "description" : "List of service orders",
+                  "items" : {
+                    "$ref" : "#/components/schemas/SimpleServiceOrder"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "List of service orders"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "message" : "Token does not contain required scopes. Required: [/^serviceinfov2\\/sken:(?<salesforceAccountId>.+):(?<ken>10236563)$/]. Had: [serviceinfov1/sken:SANDBOX:111111111]"
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              }
+            },
+            "description" : "Required scopes are missing"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "message" : "The requested resource is not found."
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              }
+            },
+            "description" : "Building does not exist for the given Id"
+          }
+        },
+        "security" : [ {
+          "OpenID" : [ "serviceinfo/ken:{equipmentId}" ]
+        } ],
+        "summary" : "List equipment service orders",
+        "tags" : [ "Equipment", "WorkOrders" ]
+      }
+    },
+    "/api/v2/equipment/{equipmentId}/serviceOrders/{workOrderNumber}" : {
+      "get" : {
+        "description" : "Detailed information of service orders can be fetched with the help of work order number which will provide elaborative fields inclusive to that work order only. Various fields like service order number, status, invoices, customer equipment number, description of the potential issue and more can be viewed using this endpoint. Work order number represents the work request that was created for a given equipment and it is a unique identifier. Now Service Info API supports KONE and NON-KONE equipment's (elevators, escalators).",
+        "operationId" : "getServiceOrderById",
+        "parameters" : [ {
+          "description" : "KEN (KONE/ NON-KONE equipment number) for the equipment with `ken:` prefix",
+          "example" : "ken:100554477",
+          "explode" : false,
+          "in" : "path",
+          "name" : "equipmentId",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/EquipmentId"
+          },
+          "style" : "simple"
+        }, {
+          "description" : "Unique identifier for work request",
+          "example" : "9B0012021111",
+          "explode" : false,
+          "in" : "path",
+          "name" : "workOrderNumber",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "style" : "simple"
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "activityType" : "Repair",
+                  "status" : "Work order Completed",
+                  "createdDateTime" : "2018-09-06T20:23:46.000Z",
+                  "description" : "Grzebień",
+                  "actualArrivalDateTime" : "2019-08-09T05:36:23.000+0000",
+                  "finishedDateTime" : "2019-08-12T05:53:30.000+0000",
+                  "serviceOrderNumber" : "9AFI42695685",
+                  "customerEquipmentNumber" : "E823175",
+                  "workOrderNumber" : "9B0092911397",
+                  "jobDescription" : "porte reste ouverte",
+                  "additionalCommentsToCustomer" : "Anfahrschaden beseitigt., dazu Schachttürblatt gerichtet und Türverriegelung eingestellt ",
+                  "equipmentFailureReason" : "50",
+                  "failedComponentCode" : "03235",
+                  "equipmentConditionOnArrival" : "09",
+                  "equipmentConditionOnArrivalDesc" : "Running - Operational malfunction",
+                  "equipmentConditionOnDeparture" : "01",
+                  "equipmentConditionOnDepartureDesc" : "Equipment running, back to normal operation",
+                  "technicianActionCode" : "50",
+                  "entrapment" : false,
+                  "serviceContractNumber" : "E00427660",
+                  "earliestStartDate" : "2019-10-18T02:00:00.000+0000",
+                  "workCenter" : "281CE401",
+                  "serviceTerritoryCode" : "PNF",
+                  "serviceTerritoryName" : "SFA:PNF - Paris Nord F",
+                  "workOrderStatus" : "PCNF;PRC;SETC;CLSD;SSAP;MANC;NMAT",
+                  "serviceOrderType" : "YSM3",
+                  "serviceOrderTypeDesc" : "Unplanned Service Order with Contract",
+                  "assemblyLocationCode" : "SN_CALLIN",
+                  "customerPurchaseOrderNumber" : "1911848",
+                  "technicianRegistrationNumber" : "01270129",
+                  "customer" : "0012136685",
+                  "workOrderPlannedStartDate" : "2020-06-09T00:00:00.000+0000",
+                  "companyCode" : "KNE",
+                  "contactPersonId" : "0031r000021CJJ8AAO",
+                  "activityTypeCode" : "Y01",
+                  "activityTypeCodeDesc" : "Call out",
+                  "systemStatus" : "CNF;PRC;SETC;TECO;SSAP;PTBL;NMAT",
+                  "workOrderStatusCode" : "13",
+                  "technicianComment" : "Anfahrschaden beseitigt., dazu Schachttürblatt gerichtet und Türverriegelung eingestellt",
+                  "salesOrderNumber" : "341021871",
+                  "workOrderLineItems" : [ {
+                    "operationText" : "50 falscher Gebrauch 03000 TÜREN UND EINGÄNGE 03235 Türen und Eingänge - Schachttür - Laufschiene, Türblätter und Türs Repariert Anfahrschaden beseitigt., dazu Schachttürblatt gerichtet und Türverriegelung eingestellt."
+                  } ],
+                  "descriptionOfWork" : "N: Condition Module L: Landing door module D: Door operator module C: Control panel module M: Machine module Z: Signalisation module Tijd aankomst: 5 maart 2020 15:15 Tijd vertrek: 5 maart 2020 15:30Uw handtekening bevestigt enkel de aanwezigheid van onze technieker ter plaatse",
+                  "invoices" : [ {
+                    "costAmount" : 518.4,
+                    "costCurrency" : "PLN",
+                    "name" : "0114135534"
+                  } ]
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/ServiceOrder"
+                }
+              }
+            },
+            "description" : "Service order information"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "message" : "Token does not contain required scopes. Required: [/^serviceinfov2\\/sken:(?<salesforceAccountId>.+):(?<ken>10236563)$/]. Had: [serviceinfov1/sken:SANDBOX:111111111]"
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              }
+            },
+            "description" : "Required scopes are missing"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "example" : {
+                  "message" : "The requested resource is not found."
+                },
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              }
+            },
+            "description" : "Service orders does not exist for the given Id"
+          }
+        },
+        "security" : [ {
+          "OpenID" : [ "serviceinfo/ken:{equipmentId}" ]
+        } ],
+        "summary" : "Get service order details",
+        "tags" : [ "Equipment", "serviceOrder" ]
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "EquipmentId" : {
+        "description" : "KEN (KONE/ NON-KONE equipment number) for the equipment with ‘ken:’ prefix",
+        "example" : "ken:100554477",
+        "type" : "string"
+      },
+      "ActivityType" : {
+        "$ref" : "#/components/schemas/ActivityTypes"
+      },
+      "ActivityTypes" : {
+        "description" : "Description of the type of maintenance visit provided like planned or unplanned repair, billable or non-billable repair, inspections etc.\n\nEnum descriptions:\n* `Callout` - An unplanned visit (reported by equipment user or by KONE remote monitoring system).\n* `Troubleshooting` - Urgent resolution visit based on automated issue detection (Only for installations with KONE 24/7 Connected Service).\n* `Preventive check` - Planned maintenance visits based on anomaly detected (Only for installations with KONE 24/7 Connected Service).\n* `Repair` - Planned or unplanned repairs.\n* `Clinica` - Planned visit based on equipment statistics (includes exhaustive analysis of equipment safety and operation and is covered by the contract).\n* `Maintenance` - Planned regular maintenance visits.\n* `Inspection` - Accompanying visit with inspector or resolution of issue from inspection report about an equipment.\n* `Equipment Condition Survey` - Planned site survey conducted to collect information, such as during the first visit.\n",
+        "enum" : [ "Callout", "Troubleshooting", "Preventive Check", "Repair", "Clinica", "Maintenance", "Inspection", "Equipment Condition Survey" ],
+        "example" : "Maintenance",
+        "type" : "string"
+      },
+      "SimpleServiceOrder" : {
+        "description" : "A simplified service order",
+        "properties" : {
+          "activityType" : {
+            "$ref" : "#/components/schemas/ActivityType"
+          },
+          "serviceOrderNumber" : {
+            "description" : "Unique identifier for service request created",
+            "example" : "9B3013021337",
+            "type" : "string"
+          },
+          "customerEquipmentNumber" : {
+            "description" : "Unique id provided by a customer as an internal identification of the equipment within their system",
+            "example" : "E823175",
+            "type" : "string"
+          },
+          "workOrderNumber" : {
+            "description" : "Unique identifier for work request",
+            "example" : "9B0012021111",
+            "type" : "string"
+          },
+          "customerPurchaseOrderNumber" : {
+            "description" : "Number that uniquely identifies a purchasing document.This number creates the link between the customer purchase order and the sales document.",
+            "type" : "string"
+          },
+          "createdDateTime" : {
+            "description" : "Date and time when planned service order is created.",
+            "example" : "2018-09-06T20:23:46Z",
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "serviceOrderNumber", "workOrderNumber" ],
+        "type" : "object"
+      },
+      "ServiceOrder" : {
+        "description" : "Work order details",
+        "properties" : {
+          "activityType" : {
+            "$ref" : "#/components/schemas/ActivityType"
+          },
+          "status" : {
+            "description" : "The state of the active service order with highest priority for a specific equipment",
+            "enum" : [ "New work order", "Plan created", "Technician is on the way", "Work has started", "Work is ongoing", "Waiting for work to continue", "Technician has left the site", "Work order Completed" ],
+            "example" : "Work order Completed",
+            "type" : "string"
+          },
+          "createdDateTime" : {
+            "description" : "Date and time when planned service order is created.",
+            "example" : "2018-09-06T20:23:46Z",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "description" : {
+            "description" : "Description of the service order and the potential issue",
+            "example" : "Broken lightc",
+            "type" : "string"
+          },
+          "actualArrivalDateTime" : {
+            "description" : "Date whereby the execution of a work order by a technician begins",
+            "example" : "2016-08-01T00:00:00Z",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "finishedDateTime" : {
+            "description" : "Date whereby the execution of a work order by a technician ends",
+            "example" : "2016-08-03T00:00:00Z",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "serviceOrderNumber" : {
+            "description" : "Unique identifier for service request created",
+            "example" : "9B3013021337",
+            "type" : "string"
+          },
+          "customerEquipmentNumber" : {
+            "description" : "Unique id provided by a customer as an internal identification of the equipment within their system",
+            "example" : "E823175",
+            "type" : "string"
+          },
+          "workOrderNumber" : {
+            "description" : "Unique identifier for work request",
+            "example" : "9B3013021337",
+            "type" : "string"
+          },
+          "jobDescription" : {
+            "description" : "Feedback given by technician in unplanned Service Orders",
+            "type" : "string"
+          },
+          "additionalCommentsToCustomer" : {
+            "description" : "This is the comment made by technician for customer during visit",
+            "type" : "string"
+          },
+          "equipmentFailureReason" : {
+            "description" : "Documented code after troubleshooting a failed equipment",
+            "type" : "string"
+          },
+          "failedComponentCode" : {
+            "description" : "Code of components which are mostly impacted",
+            "type" : "string"
+          },
+          "equipmentConditionOnArrival" : {
+            "description" : "Code for analyzed condition of an equipment on arrival of technician that has been reported failed",
+            "type" : "string"
+          },
+          "equipmentConditionOnArrivalDesc" : {
+            "description" : "Description of analyzed condition of an equipment when techinician arrives on site where equipment has been reported failed",
+            "type" : "string"
+          },
+          "equipmentConditionOnDeparture" : {
+            "description" : "Code for the state of an equipment being repaired at the time when technician exits the equipment location",
+            "type" : "string"
+          },
+          "equipmentConditionOnDepartureDesc" : {
+            "description" : "Description of the state of an equipment being repaired at the time when technician exits the failed equipment location",
+            "type" : "string"
+          },
+          "technicianActionCode" : {
+            "description" : "Code of the action being performed by a technician toward repairing a failed equipment",
+            "type" : "string"
+          },
+          "entrapment" : {
+            "description" : "Indication that someone is inside an elevator after it's operation stopped",
+            "type" : "boolean"
+          },
+          "serviceContractNumber" : {
+            "description" : "Number with which service orders were sold. It can include multiple service orders",
+            "type" : "string"
+          },
+          "earliestStartDate" : {
+            "description" : "Planned date for technician to start working on a service order",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "workCenter" : {
+            "description" : "Number allocated to a geographical mapping within which an equipment is located.",
+            "example" : "2374022K",
+            "type" : "string"
+          },
+          "serviceTerritoryCode" : {
+            "description" : "This indicates the KONE territory code to which the service order has been created and will be responsible for the handling and resolution.",
+            "type" : "string"
+          },
+          "serviceTerritoryName" : {
+            "description" : "This indicates the KONE territory to which the service order has been created and will be responsible for the handling and resolution.",
+            "type" : "string"
+          },
+          "workOrderStatus" : {
+            "description" : "Status of the work request",
+            "type" : "string"
+          },
+          "serviceOrderType" : {
+            "$ref" : "#/components/schemas/ServiceOrderTypes"
+          },
+          "serviceOrderTypeDesc" : {
+            "description" : "Description of the exact type of service order requested during the creation of the service order",
+            "type" : "string"
+          },
+          "assemblyLocationCode" : {
+            "description" : "Code for the sub parts of an equipment which are divided into separate units (assemblies).",
+            "type" : "string"
+          },
+          "customerPurchaseOrderNumber" : {
+            "description" : "Number that uniquely identifies a purchasing document.This number creates the link between the customer purchase order and the sales document.",
+            "type" : "string"
+          },
+          "technicianRegistrationNumber" : {
+            "description" : "Unique number of a technician that can be provided as means of indentity",
+            "type" : "string"
+          },
+          "customer" : {
+            "description" : "The unique number of person or entity to whom the goods or services are sold and is contractually responsible for sales orders",
+            "type" : "string"
+          },
+          "workOrderPlannedStartDate" : {
+            "description" : "Date on which the technician will be able to arrive at the site for resolving equipment issue for planned service orders. Note that the technician may start earlier than this date.",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "companyCode" : {
+            "description" : "It is the frontline company code",
+            "type" : "string"
+          },
+          "contactPersonId" : {
+            "description" : "Contact of a person from  Front Line related to service order",
+            "type" : "string"
+          },
+          "activityTypeCode" : {
+            "description" : "Documented code representing the type of maintenance visit provided like planned or unplanned repair, billable or non-billable repair or inspections etc",
+            "type" : "string"
+          },
+          "activityTypeCodeDesc" : {
+            "description" : "Description of the type of maintenance visit provided like planned or unplanned repair, billable or non-billable repair or inspections etc",
+            "type" : "string"
+          },
+          "systemStatus" : {
+            "description" : "The status of the Service order which is currently valid",
+            "type" : "string"
+          },
+          "workOrderStatusCode" : {
+            "description" : "Documented code of a service order state with respect to its progress towards completion for a specific equipment",
+            "type" : "string"
+          },
+          "technicianComment" : {
+            "description" : "Text that describes any information that is entered by the Technician after the Equipment is serviced",
+            "type" : "string"
+          },
+          "salesOrderNumber" : {
+            "description" : "SalesOrderNumber represents the contract between the customer and sales organization. It is the legal document number for delivery and supply of specified goods and services. SalesOrderNumber is available for YSM6 Fixed Price Repair Order service order type.",
+            "type" : "string"
+          },
+          "workOrderLineItems" : {
+            "description" : "List of operational texts",
+            "items" : {
+              "$ref" : "#/components/schemas/workOrderLineItems"
+            },
+            "type" : "array"
+          },
+          "descriptionOfWork" : {
+            "description" : "Description of technical activities performed by the technician",
+            "type" : "string"
+          },
+          "invoices" : {
+            "description" : "List of invoices related to the service order",
+            "items" : {
+              "$ref" : "#/components/schemas/Invoice"
+            },
+            "type" : "array"
+          }
+        },
+        "required" : [ "serviceOrderNumber", "workOrderNumber" ],
+        "type" : "object"
+      },
+      "Invoice" : {
+        "description" : "Invoice details",
+        "properties" : {
+          "costAmount" : {
+            "description" : "Cost amount of the invoices booked for a service order",
+            "example" : 350.1,
+            "type" : "number"
+          },
+          "costCurrency" : {
+            "description" : "ISO 4217 currency code of the invoice",
+            "example" : "EUR",
+            "type" : "string"
+          },
+          "name" : {
+            "description" : "Unique identifer of an invoice related to the work order",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "workOrderLineItems" : {
+        "description" : "Work Order Line Items details",
+        "properties" : {
+          "operationText" : {
+            "description" : "This text describes the Operation or Sub-operation to be performed by the technician",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ServiceOrderTypes" : {
+        "description" : "Code for the type of service order requested during the creation of the service order like YSM1 or YSM2\n\nEnum descriptions:\n* `YSM1` - Planned Service Order with Contract\n* `YSM2` - Planned Service Order without Contract\n* `YSM3` - Unplanned Service Order with Contract\n* `YSM4` - Unplanned Service Order without Contract\n* `YSM6` - Fixed Price Repair Order\n",
+        "enum" : [ "YSM1", "YSM2", "YSM3", "YSM4", "YSM6" ],
+        "type" : "string"
+      },
+      "Error" : {
+        "description" : "Error",
+        "properties" : {
+          "message" : {
+            "description" : "Human readable description of an error",
+            "example" : "Something went wrong.",
+            "type" : "string"
+          },
+          "errors" : {
+            "description" : "A more detailed list of errors",
+            "items" : {
+              "$ref" : "#/components/schemas/DetailedError"
+            },
+            "type" : "array"
+          }
+        },
+        "required" : [ "message" ],
+        "type" : "object"
+      },
+      "DetailedError" : {
+        "description" : "Detailed error",
+        "properties" : {
+          "type" : {
+            "description" : "Type of the error, for user code to react to",
+            "type" : "string"
+          },
+          "bodyPath" : {
+            "description" : "path of the error in the body object, if request was json then this is a json path",
+            "type" : "string"
+          },
+          "urlPath" : {
+            "description" : "describes where in URL the error was",
+            "type" : "string"
+          },
+          "header" : {
+            "description" : "describes which header was wrong",
+            "type" : "string"
+          }
+        },
+        "required" : [ "type" ],
+        "type" : "object"
+      }
+    },
+    "securitySchemes" : {
+      "OpenID" : {
+        "openIdConnectUrl" : "/api/v2/oauth2/.well-known/openid-configuration",
+        "type" : "openIdConnect"
+      }
+    }
+  }
+}
