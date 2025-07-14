@@ -1,20 +1,25 @@
-import {DeviceBaseRequestDTO} from "../../../device/dto/DeviceBaseRequestDTO";
-import {IsNotEmpty, IsNumber} from "class-validator";
-import {ElevatorBaseRequest} from "../ElevatorBaseRequest";
-
+import { DeviceBaseRequestDTO } from '../../../device/dto/DeviceBaseRequestDTO';
+import { IsNotEmpty, IsNumber } from 'class-validator';
+import { ElevatorBaseRequest } from '../ElevatorBaseRequest';
 
 export class CallElevatorRequestDTO extends ElevatorBaseRequest {
-    get toFloor(): number {
-        return this._toFloor;
-    }
+  get fromFloor(): number {
+    return this._fromFloor;
+  }
 
-    set toFloor(value: number) {
-        this._toFloor = value;
-    }
+  set fromFloor(value: number) {
+    this._fromFloor = value;
+  }
+  get toFloor(): number {
+    return this._toFloor;
+  }
 
-    @IsNumber()
-    @IsNotEmpty()
-    private _toFloor: number;
+  set toFloor(value: number) {
+    this._toFloor = value;
+  }
 
-
+  @IsNumber()
+  @IsNotEmpty()
+  private _toFloor: number;
+  private _fromFloor: number;
 }
