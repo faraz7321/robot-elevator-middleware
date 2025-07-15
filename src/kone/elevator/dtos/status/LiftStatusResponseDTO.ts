@@ -1,7 +1,7 @@
 import { BaseResponseDTO } from '../../../baseDtos/BaseResponseDTO';
 import { IsArray, IsNumber, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ListElevatorsResultDTO } from '../list/ListElevatorsResultDTO';
+import { ListElevatorsResultDTO } from './StatusElevatorsResultDTO';
 
 export class LiftStatusResponseDTO extends BaseResponseDTO {
   @ValidateNested({ each: true })
