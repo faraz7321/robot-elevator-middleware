@@ -28,11 +28,41 @@ export class ElevatorService {
   }
 
   listElevators(request: ListElevatorsRequestDTO): ListElevatorsResponseDTO {
-    return new ListElevatorsResponseDTO();
+    const response = new ListElevatorsResponseDTO();
+    console.log(response);
+
+    response.result = [
+      {
+        liftNo: 1,
+        accessibleFloors: '1,2,3,4,5,6,7,8,12,14,15', //get them from client for test
+        bindingStatus: '11',
+      },
+    ];
+
+    response.errcode = 0;
+    response.errmsg = 'SUCCESS';
+
+    return response;
   }
 
   getLiftStatus(request: LiftStatusRequestDTO): LiftStatusResponseDTO {
-    return new LiftStatusResponseDTO();
+    console.log(request);
+
+    const response = new LiftStatusResponseDTO();
+    response.result = [
+      {
+        liftNo: 1,
+        floor: 4, //need to implement this
+        state: 0,
+        prevDirection: 2,
+        liftDoorStatus: 2,
+      },
+    ];
+
+    response.errcode = 0;
+    response.errmsg = 'SUCCESS';
+
+    return response;
   }
 
   async callElevator(
@@ -111,10 +141,24 @@ export class ElevatorService {
   }
 
   delayElevatorDoors(request: DelayDoorRequestDTO): BaseResponseDTO {
-    return new BaseResponseDTO();
+    console.log(request);
+
+    const response = new BaseResponseDTO();
+
+    response.errcode = 0;
+    response.errmsg = 'SUCCESS';
+
+    return response;
   }
 
   reserveOrCancelCall(request: ReserveAndCancelRequestDTO): BaseResponseDTO {
-    return new BaseResponseDTO();
+    console.log(request);
+
+    const response = new BaseResponseDTO();
+
+    response.errcode = 0;
+    response.errmsg = 'SUCCESS';
+
+    return response;
   }
 }

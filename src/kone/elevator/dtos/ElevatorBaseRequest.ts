@@ -37,14 +37,6 @@ export class ElevatorBaseRequest {
     this._placeId = value;
   }
 
-  get liftNo(): number {
-    return this._liftNo;
-  }
-
-  set liftNo(value: number) {
-    this._liftNo = value;
-  }
-
   get deviceUuid(): string {
     return this._deviceUuid;
   }
@@ -57,10 +49,6 @@ export class ElevatorBaseRequest {
   @Length(24, 24)
   @IsNotEmpty()
   private _deviceUuid: string;
-
-  @IsNumber()
-  @IsNotEmpty()
-  private _liftNo: number;
 
   @IsString()
   @IsNotEmpty()
