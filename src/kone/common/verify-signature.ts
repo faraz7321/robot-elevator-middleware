@@ -4,6 +4,9 @@ function md5(str: string): string {
   return crypto.createHash('md5').update(str).digest('hex');
 }
 
+const BIB_DEVICE_UUID = process.env.BIB_DEVICE_UUID || '';
+const ELEVATOR_APP_NAME = process.env.ELEVATOR_APP_NAME || '';
+
 export function generateCheck(
   deviceUuid: string,
   ts: number,
@@ -38,11 +41,11 @@ export function generateSign(
 }
 
 export function isValidRequest(
-  body: Record<string, any>,
+  request: Record<string, any>,
   appSecret: string,
   deviceSecret: string,
 ): boolean {
-  const { sign, check, ts, appname, deviceUuid } = body;
+  const { sign, check, ts, appname, deviceUuid } = request;
   console.log('Incoming Payload Check:', {
     sign,
     check,
@@ -66,13 +69,19 @@ export function isValidRequest(
     return false;
   }
 
-  const calculatedCheck = generateCheck(deviceUuid, ts, deviceSecret);
-  const calculatedSign = generateSign(body, appname, appSecret, ts);
+  if (appname !== ELEVATOR_APP_NAME) {
+    console.warn(`Blocked: appname '${appname}' is not allowed`);
 
-  console.log('CALCULATED CHECK:', calculatedCheck);
-  console.log('RECEIVED CHECK:', check);
-  console.log('CALCULATED SIGN:', calculatedSign);
-  console.log('RECEIVED SIGN:', sign);
+    console.log(
+      'EXPECTED APP_NAME HEX:',
+      Buffer.from(ELEVATOR_APP_NAME || '').toString('hex'),
+    );
+    console.log('RECEIVED appname HEX:', Buffer.from(appname).toString('hex'));
+
+    return false;
+  }
+  const calculatedCheck = generateCheck(deviceUuid, ts, deviceSecret);
+  const calculatedSign = generateSign(request, appname, appSecret, ts);
 
   return calculatedCheck === check && calculatedSign === sign;
 }

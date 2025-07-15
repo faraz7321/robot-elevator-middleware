@@ -18,6 +18,9 @@ dotenv.config();
 export class ElevatorController {
   constructor(private readonly elevatorService: ElevatorService) {}
 
+  private appSecret = process.env.ELEVATOR_APP_SECRET || '';
+  private deviceSecret = process.env.BIB_DEVICE_SECRET || '';
+
   @Post('list')
   listElevators(
     @Body() request: ListElevatorsRequestDTO,
@@ -34,13 +37,7 @@ export class ElevatorController {
   async call(
     @Body() request: CallElevatorRequestDTO,
   ): Promise<BaseResponseDTO> {
-    const appSecret = process.env.APP_SECRET || '';
-    const deviceSecret = process.env.BIB_DEVICE_SECRET || '';
-    console.log('Server Env', {
-      appSecret: process.env.APP_SECRET,
-      deviceSecret: process.env.BIB_DEVICE_SECRET,
-    });
-    if (!isValidRequest(request, appSecret, deviceSecret)) {
+    if (!isValidRequest(request, this.appSecret, this.deviceSecret)) {
       throw new UnauthorizedException('Invalid sign or check');
     }
 
