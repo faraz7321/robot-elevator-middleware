@@ -1,15 +1,12 @@
-import {IsArray, IsNumber, IsString} from "class-validator";
-
+import { IsNumber, IsString } from 'class-validator';
 
 export class ListElevatorsResultDTO {
+  @IsNumber()
+  liftNo: number;
 
-    @IsNumber()
-    liftNo: number;
+  @IsString()
+  accessibleFloors: string;
 
-    @IsArray()
-    accessibleFloors: number[];
-
-    @IsString()
-    bindingStatus: string;
-
+  @IsString()
+  bindingStatus: string;
 }

@@ -1,9 +1,17 @@
-import {DeviceBaseRequestDTO} from "../../../device/dto/DeviceBaseRequestDTO";
-import {IsNotEmpty, IsNumber, IsString, Length} from "class-validator";
-import {ElevatorBaseRequest} from "../ElevatorBaseRequest";
-
+import { DeviceBaseRequestDTO } from '../../../device/dto/DeviceBaseRequestDTO';
+import { IsNotEmpty, IsNumber, IsString, Length } from 'class-validator';
+import { ElevatorBaseRequest } from '../ElevatorBaseRequest';
 
 export class LiftStatusRequestDTO extends ElevatorBaseRequest {
-    // nothing to add
+  get liftNo(): number {
+    return this._liftNo;
+  }
 
+  set liftNo(value: number) {
+    this._liftNo = value;
+  }
+
+  @IsNumber()
+  @IsNotEmpty()
+  private _liftNo: number;
 }

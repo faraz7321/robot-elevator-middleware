@@ -1,11 +1,20 @@
-import {ElevatorBaseRequest} from "../ElevatorBaseRequest";
-import {IsNotEmpty, IsNumber} from "class-validator";
+import { ElevatorBaseRequest } from '../ElevatorBaseRequest';
+import { IsNotEmpty, IsNumber } from 'class-validator';
 
+export class ReserveAndCancelRequestDTO extends ElevatorBaseRequest {
+  get liftNo(): number {
+    return this._liftNo;
+  }
 
-export class ReserveAndCancelRequestDTO extends ElevatorBaseRequest{
+  set liftNo(value: number) {
+    this._liftNo = value;
+  }
 
-    @IsNumber()
-    @IsNotEmpty()
-    locked: number;
+  @IsNumber()
+  @IsNotEmpty()
+  locked: number;
 
+  @IsNumber()
+  @IsNotEmpty()
+  private _liftNo: number;
 }

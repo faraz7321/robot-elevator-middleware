@@ -1,14 +1,6 @@
-import {IsNotEmpty, IsString, Length} from "class-validator";
+import { BaseRequestDTO } from '../../../baseDtos/BaseRequestDTO';
+//import { IsNotEmpty, IsNumber } from 'class-validator';
 
-
-export class ListElevatorsRequestDTO {
-
-    @IsString()
-    @Length(24, 24)
-    @IsNotEmpty()
-    deviceUuid: string;
-
-    @IsString()
-    @IsNotEmpty()
-    placeId: string;
+export class ListElevatorsRequestDTO extends BaseRequestDTO {
+  //nothing to add here
 }
