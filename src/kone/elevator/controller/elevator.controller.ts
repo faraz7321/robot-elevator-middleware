@@ -8,6 +8,11 @@ import { DelayDoorRequestDTO } from '../dtos/delay/DelayDoorRequestDTO';
 import { ReserveAndCancelRequestDTO } from '../dtos/reserve/ReserveAndCancelRequestDTO';
 import { ListElevatorsRequestDTO } from '../dtos/list/ListElevatorsRequestDTO';
 import { ListElevatorsResponseDTO } from '../dtos/list/ListElevatorsResponseDTO';
+import { isValidRequest } from '../../common/verify-signature';
+import { UnauthorizedException } from '@nestjs/common';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
 
 @Controller('lift')
 export class ElevatorController {
@@ -29,7 +34,17 @@ export class ElevatorController {
   async call(
     @Body() request: CallElevatorRequestDTO,
   ): Promise<BaseResponseDTO> {
-    return this.elevatorService.callElevator(request); 
+    const appSecret = process.env.APP_SECRET || '';
+    const deviceSecret = process.env.BIB_DEVICE_SECRET || '';
+    console.log('Server Env', {
+      appSecret: process.env.APP_SECRET,
+      deviceSecret: process.env.BIB_DEVICE_SECRET,
+    });
+    if (!isValidRequest(request, appSecret, deviceSecret)) {
+      throw new UnauthorizedException('Invalid sign or check');
+    }
+
+    return this.elevatorService.callElevator(request);
   }
 
   @Post('open')

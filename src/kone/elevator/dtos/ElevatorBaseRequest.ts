@@ -1,40 +1,84 @@
-import {IsNotEmpty, IsNumber, IsString, Length} from "class-validator";
-
+import { IsNotEmpty, IsNumber, IsString, Length } from 'class-validator';
 
 export class ElevatorBaseRequest {
-    get placeId(): string {
-        return this._placeId;
-    }
+  get appname(): string {
+    return this._appname;
+  }
 
-    set placeId(value: string) {
-        this._placeId = value;
-    }
-    get liftNo(): number {
-        return this._liftNo;
-    }
+  set appname(value: string) {
+    this._appname = value;
+  }
+  get check(): string {
+    return this._check;
+  }
 
-    set liftNo(value: number) {
-        this._liftNo = value;
-    }
-    get deviceUuid(): string {
-        return this._deviceUuid;
-    }
+  set check(value: string) {
+    this._check = value;
+  }
+  get sign(): string {
+    return this._sign;
+  }
 
-    set deviceUuid(value: string) {
-        this._deviceUuid = value;
-    }
+  set sign(value: string) {
+    this._sign = value;
+  }
+  get ts(): number {
+    return this._ts;
+  }
 
-    @IsString()
-    @Length(24, 24)
-    @IsNotEmpty()
-    private _deviceUuid: string;
+  set ts(value: number) {
+    this._ts = value;
+  }
+  get placeId(): string {
+    return this._placeId;
+  }
 
-    @IsNumber()
-    @IsNotEmpty()
-    private _liftNo: number;
+  set placeId(value: string) {
+    this._placeId = value;
+  }
 
-    @IsString()
-    @IsNotEmpty()
-    private _placeId: string;
+  get liftNo(): number {
+    return this._liftNo;
+  }
 
+  set liftNo(value: number) {
+    this._liftNo = value;
+  }
+
+  get deviceUuid(): string {
+    return this._deviceUuid;
+  }
+
+  set deviceUuid(value: string) {
+    this._deviceUuid = value;
+  }
+
+  @IsString()
+  @Length(24, 24)
+  @IsNotEmpty()
+  private _deviceUuid: string;
+
+  @IsNumber()
+  @IsNotEmpty()
+  private _liftNo: number;
+
+  @IsString()
+  @IsNotEmpty()
+  private _placeId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  private _appname: string;
+
+  @IsString()
+  @IsNotEmpty()
+  private _check: string;
+
+  @IsString()
+  @IsNotEmpty()
+  private _sign: string;
+
+  @IsNumber()
+  @IsNotEmpty()
+  private _ts: number;
 }
