@@ -1,28 +1,37 @@
-import {Body, Controller, Get, Post} from '@nestjs/common';
-import {DeviceService} from "../service/device.service";
-import {RegisterDeviceRequestDTO} from "../dto/register/RegisterDeviceRequestDTO";
-import {RegisterDeviceResponseDTO} from "../dto/register/RegisterDeviceResponseDTO";
-import {BindDeviceRequestDTO} from "../dto/bind/BindDeviceRequestDTO";
-import {BindDeviceResponseDTO} from "../dto/bind/BindDeviceResponseDTO";
+import { Body, Controller, Get, Post, UnauthorizedException } from '@nestjs/common';
+import { DeviceService } from '../service/device.service';
+import { RegisterDeviceRequestDTO } from '../dto/register/RegisterDeviceRequestDTO';
+import { RegisterDeviceResponseDTO } from '../dto/register/RegisterDeviceResponseDTO';
+import { BindDeviceRequestDTO } from '../dto/bind/BindDeviceRequestDTO';
+import { BindDeviceResponseDTO } from '../dto/bind/BindDeviceResponseDTO';
+import {
+  validateSignedRequest,
+  isValidRegisterRequest,
+} from '../../common/verify-signature';
 
-
-@Controller("device")
+@Controller('device')
 export class DeviceController {
-    constructor(private readonly deviceService: DeviceService) {}
+  constructor(private readonly deviceService: DeviceService) {}
 
-    @Post("register")
-    registerDevice(@Body() device: RegisterDeviceRequestDTO): RegisterDeviceResponseDTO {
-        return this.deviceService.registerDevice(device);
+  @Post('register')
+  registerDevice(
+    @Body() request: RegisterDeviceRequestDTO,
+  ): RegisterDeviceResponseDTO {
+    if (!isValidRegisterRequest(request)) {
+      throw new UnauthorizedException('Invalid sign or check');
     }
+    return this.deviceService.registerDevice(request);
+  }
 
-    @Post("binding")
-    bindDevice(@Body() device: BindDeviceRequestDTO): BindDeviceResponseDTO {
-        return this.deviceService.bindDevice(device);
-    }
+  @Post('binding')
+  bindDevice(@Body() request: BindDeviceRequestDTO): BindDeviceResponseDTO {
+    validateSignedRequest(request);
+    return this.deviceService.bindDevice(request);
+  }
 
-    @Post("unbinding")
-    unbindDevice(@Body() device: BindDeviceRequestDTO): BindDeviceResponseDTO {
-        return this.deviceService.unbindDevice(device);
-    }
-
+  @Post('unbinding')
+  unbindDevice(@Body() request: BindDeviceRequestDTO): BindDeviceResponseDTO {
+    validateSignedRequest(request);
+    return this.deviceService.unbindDevice(request);
+  }
 }

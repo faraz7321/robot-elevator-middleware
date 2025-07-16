@@ -8,9 +8,6 @@ import { ReserveAndCancelRequestDTO } from '../dtos/reserve/ReserveAndCancelRequ
 import { ListElevatorsRequestDTO } from '../dtos/list/ListElevatorsRequestDTO';
 import { ListElevatorsResponseDTO } from '../dtos/list/ListElevatorsResponseDTO';
 
-import * as dotenv from 'dotenv';
-
-dotenv.config();
 import { openWebSocketConnection } from '../../common/koneapi';
 import { plainToInstance } from 'class-transformer';
 import { AccessTokenService } from '../../auth/service/accessToken.service';

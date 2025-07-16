@@ -8,8 +8,7 @@ import { DelayDoorRequestDTO } from '../dtos/delay/DelayDoorRequestDTO';
 import { ReserveAndCancelRequestDTO } from '../dtos/reserve/ReserveAndCancelRequestDTO';
 import { ListElevatorsRequestDTO } from '../dtos/list/ListElevatorsRequestDTO';
 import { ListElevatorsResponseDTO } from '../dtos/list/ListElevatorsResponseDTO';
-import { isValidRequest } from '../../common/verify-signature';
-import { UnauthorizedException } from '@nestjs/common';
+import { validateSignedRequest } from '../../common/verify-signature';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
@@ -18,18 +17,17 @@ dotenv.config();
 export class ElevatorController {
   constructor(private readonly elevatorService: ElevatorService) {}
 
-  private appSecret = process.env.ELEVATOR_APP_SECRET || '';
-  private deviceSecret = process.env.BIB_DEVICE_SECRET || '';
-
   @Post('list')
   listElevators(
     @Body() request: ListElevatorsRequestDTO,
   ): ListElevatorsResponseDTO {
+    validateSignedRequest(request);
     return this.elevatorService.listElevators(request);
   }
 
   @Post('status')
   getLiftStatus(@Body() request: LiftStatusRequestDTO): LiftStatusResponseDTO {
+    validateSignedRequest(request);
     return this.elevatorService.getLiftStatus(request);
   }
 
@@ -37,15 +35,15 @@ export class ElevatorController {
   async call(
     @Body() request: CallElevatorRequestDTO,
   ): Promise<BaseResponseDTO> {
-    if (!isValidRequest(request, this.appSecret, this.deviceSecret)) {
-      throw new UnauthorizedException('Invalid sign or check');
-    }
+    validateSignedRequest(request);
 
     return this.elevatorService.callElevator(request);
   }
 
   @Post('open')
   delayElevatorDoors(@Body() request: DelayDoorRequestDTO): BaseResponseDTO {
+    validateSignedRequest(request);
+
     return this.elevatorService.delayElevatorDoors(request);
   }
 
@@ -53,6 +51,8 @@ export class ElevatorController {
   reserveOrCancelElevator(
     @Body() request: ReserveAndCancelRequestDTO,
   ): BaseResponseDTO {
+    validateSignedRequest(request);
+
     return this.elevatorService.reserveOrCancelCall(request);
   }
 }
