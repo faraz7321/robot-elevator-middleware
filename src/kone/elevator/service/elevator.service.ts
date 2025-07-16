@@ -27,9 +27,14 @@ export class ElevatorService {
     return Math.floor(Math.random() * 1000000000);
   }
 
+  //TODO: Get elevator list (logic needs to be implemented in middleware)
   listElevators(request: ListElevatorsRequestDTO): ListElevatorsResponseDTO {
+    console.log(
+      'Requested: /openapi/v5/lift/list on ' + new Date().toISOString(),
+    );
+    console.log(request);
+
     const response = new ListElevatorsResponseDTO();
-    console.log(response);
 
     response.result = [
       {
@@ -45,7 +50,11 @@ export class ElevatorService {
     return response;
   }
 
+  //TODO: Get lift Status
   getLiftStatus(request: LiftStatusRequestDTO): LiftStatusResponseDTO {
+    console.log(
+      'Requested: /openapi/v5/lift/status on ' + new Date().toISOString(),
+    );
     console.log(request);
 
     const response = new LiftStatusResponseDTO();
@@ -68,6 +77,11 @@ export class ElevatorService {
   async callElevator(
     request: CallElevatorRequestDTO,
   ): Promise<BaseResponseDTO> {
+    console.log(
+      'Requested: /openapi/v5/lift/call on ' + new Date().toISOString(),
+    );
+    console.log(request);
+
     const requestId = this.getRequestId();
     const accessToken = await this.accessTokenService.getAccessToken(
       request.placeId,
@@ -140,7 +154,11 @@ export class ElevatorService {
     return plainToInstance(BaseResponseDTO, response);
   }
 
+  //TODO: Delay opening of elevator doors
   delayElevatorDoors(request: DelayDoorRequestDTO): BaseResponseDTO {
+    console.log(
+      'Requested: /openapi/v5/lift/open on ' + new Date().toISOString(),
+    );
     console.log(request);
 
     const response = new BaseResponseDTO();
@@ -151,7 +169,11 @@ export class ElevatorService {
     return response;
   }
 
+  //TODO: Reserve or Cancel call
   reserveOrCancelCall(request: ReserveAndCancelRequestDTO): BaseResponseDTO {
+    console.log(
+      'Requested: /openapi/v5/lift/lock on ' + new Date().toISOString(),
+    );
     console.log(request);
 
     const response = new BaseResponseDTO();
