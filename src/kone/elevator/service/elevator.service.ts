@@ -8,9 +8,13 @@ import { ReserveAndCancelRequestDTO } from '../dtos/reserve/ReserveAndCancelRequ
 import { ListElevatorsRequestDTO } from '../dtos/list/ListElevatorsRequestDTO';
 import { ListElevatorsResponseDTO } from '../dtos/list/ListElevatorsResponseDTO';
 
-import { openWebSocketConnection } from '../../common/koneapi';
+import {
+  fetchBuildingTopology,
+  openWebSocketConnection,
+} from '../../common/koneapi';
 import { plainToInstance } from 'class-transformer';
 import { AccessTokenService } from '../../auth/service/accessToken.service';
+import { BuildingTopology } from '../../common/types';
 
 /**
  * Update these two variables with your own credentials or set them up as environment variables.
@@ -25,7 +29,11 @@ export class ElevatorService {
   }
 
   //TODO: Get elevator list (logic needs to be implemented in middleware)
-  listElevators(request: ListElevatorsRequestDTO): ListElevatorsResponseDTO {
+  private buildingTopologyCache: Map<string, BuildingTopology> = new Map();
+
+  async listElevators(
+    request: ListElevatorsRequestDTO,
+  ): Promise<ListElevatorsResponseDTO> {
     console.log(
       'Requested: /openapi/v5/lift/list on ' + new Date().toISOString(),
     );
@@ -33,13 +41,37 @@ export class ElevatorService {
 
     const response = new ListElevatorsResponseDTO();
 
-    response.result = [
-      {
-        liftNo: 1,
-        accessibleFloors: '1,2,3,4,5,6,7,8,12,14,15', //get them from client for test
-        bindingStatus: '11',
-      },
-    ];
+    const accessToken = await this.accessTokenService.getAccessToken(
+      request.placeId,
+    );
+
+    let topology = this.buildingTopologyCache.get(request.placeId);
+    if (!topology) {
+      topology = await fetchBuildingTopology(accessToken, request.placeId);
+      this.buildingTopologyCache.set(request.placeId, topology);
+    }
+
+    const areaNameMap = new Map(
+      topology.areas.map((area) => [area.areaId, area.shortName]),
+    );
+
+    response.result = topology.groups.flatMap((group) =>
+      group.lifts.map((lift) => {
+        const floorNames = new Set<string>();
+        lift.floors.forEach((floor) => {
+          floor.areasServed.forEach((areaId) => {
+            const name = areaNameMap.get(areaId);
+            if (name) floorNames.add(name);
+          });
+        });
+        const liftNo = Number(lift.liftId.split(':').pop());
+        return {
+          liftNo,
+          accessibleFloors: Array.from(floorNames).join(','),
+          bindingStatus: '11',
+        };
+      }),
+    );
 
     response.errcode = 0;
     response.errmsg = 'SUCCESS';
@@ -84,9 +116,14 @@ export class ElevatorService {
       request.placeId,
     );
 
-    // Select the first available building
-    const targetBuildingId = `building:${request.placeId}`;
-    // Fetch the topology of the specific building
+    const targetBuildingId = request.placeId;
+    let topology = this.buildingTopologyCache.get(targetBuildingId);
+    if (!topology) {
+      topology = await fetchBuildingTopology(accessToken, targetBuildingId);
+      this.buildingTopologyCache.set(targetBuildingId, topology);
+    }
+    const targetGroupId =
+      topology.groups?.[0]?.groupId.split(':').pop() || '1';
 
     // Open the WebSocket connection
     const webSocketConnection = await openWebSocketConnection(accessToken);
@@ -126,7 +163,7 @@ export class ElevatorService {
         type: 'lift-call-api-v2',
         buildingId: targetBuildingId,
         callType: 'action',
-        groupId: '1',
+        groupId: targetGroupId,
         payload: {
           request_id: requestId,
           area: request.fromFloor, //current floor
