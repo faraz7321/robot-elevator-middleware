@@ -161,7 +161,7 @@ describe('ElevatorController', () => {
     const check = generateCheck(deviceUuid, ts, deviceSecret);
     const req = { ...body, sign, check };
     const res = { result: 'delayed' };
-    elevatorService.delayElevatorDoors.mockReturnValue(res);
+    elevatorService.delayElevatorDoors.mockResolvedValue(res);
 
     const response = await request(app.getHttpServer())
       .post('/lift/open')
@@ -186,7 +186,7 @@ describe('ElevatorController', () => {
     const check = generateCheck(deviceUuid, ts, deviceSecret);
     const req = { ...body, sign, check };
     const res = { result: 'locked' };
-    elevatorService.reserveOrCancelCall.mockReturnValue(res);
+    elevatorService.reserveOrCancelCall.mockResolvedValue(res);
 
     const response = await request(app.getHttpServer())
       .post('/lift/lock')

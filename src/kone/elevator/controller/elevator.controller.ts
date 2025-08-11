@@ -52,21 +52,23 @@ export class ElevatorController {
   }
 
   @Post('open')
-  delayElevatorDoors(@Body() request: DelayDoorRequestDTO): BaseResponseDTO {
+  async delayElevatorDoors(
+    @Body() request: DelayDoorRequestDTO,
+  ): Promise<BaseResponseDTO> {
     logIncoming('robot /openapi/v5/lift/open', request);
     validateSignedRequest(request);
-    const response = this.elevatorService.delayElevatorDoors(request);
+    const response = await this.elevatorService.delayElevatorDoors(request);
     logOutgoing('robot /openapi/v5/lift/open', response);
     return response;
   }
 
   @Post('lock')
-  reserveOrCancelElevator(
+  async reserveOrCancelElevator(
     @Body() request: ReserveAndCancelRequestDTO,
-  ): BaseResponseDTO {
+  ): Promise<BaseResponseDTO> {
     logIncoming('robot /openapi/v5/lift/lock', request);
     validateSignedRequest(request);
-    const response = this.elevatorService.reserveOrCancelCall(request);
+    const response = await this.elevatorService.reserveOrCancelCall(request);
     logOutgoing('robot /openapi/v5/lift/lock', response);
     return response;
   }
