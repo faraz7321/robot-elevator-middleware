@@ -3,6 +3,7 @@ import querystring from 'querystring';
 import WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import _ from 'lodash';
+import { logIncoming, logOutgoing } from './logger';
 
 import {
   BuildingTopology,
@@ -15,7 +16,7 @@ import {
   ResumeSessionPayload,
   WebSocketResumeSessionResponse,
 } from './types';
-import {AccessTokenData} from "../auth/dto/AccessTokenData";
+import { AccessTokenData } from '../auth/dto/AccessTokenData';
 
 /**
  * Variables that contain the main endpoints used in this demo project.
@@ -70,12 +71,12 @@ export async function fetchAccessToken(
   };
 
   try {
+    logOutgoing('kone fetchAccessToken', { scopes });
     const requestResult = await axios(requestConfig);
-    console.log(`Access token: ${JSON.stringify(requestResult.data)}`);
+    logIncoming('kone fetchAccessToken', requestResult.data);
 
     // get the accessToken from the response
     return requestResult.data;
-
   } catch (authError) {
     let errorMsg = 'Error fetching the access token';
 
@@ -122,7 +123,9 @@ export async function fetchLimitedAccessToken(
     },
   };
 
+  logOutgoing('kone fetchLimitedAccessToken', { scopes, userIdentity });
   const requestResult = await axios(requestConfig);
+  logIncoming('kone fetchLimitedAccessToken', requestResult.data);
 
   // get the accessToken from the response
   const limitedToken = requestResult.data.access_token;
@@ -153,8 +156,9 @@ export const fetchResources = async (
   };
 
   // Execute the request
+  logOutgoing('kone fetchResources', { resourceType });
   const result = await axios(requestConfig);
-  console.log(`Resources: ${result.data}`);
+  logIncoming('kone fetchResources', result.data);
 
   // Assert data to be our wanted list of buildings
   const resources = (result.data as string[]).filter((resource) =>
@@ -188,10 +192,12 @@ export async function fetchBuildingTopology(
 
   // Execute the request
   try {
+    logOutgoing('kone fetchBuildingTopology', { buildingId });
     const result = await axios(requestConfig);
 
     // Assert data to be our wanted building topology information
     const buildingTopology = result.data as BuildingTopology;
+    logIncoming('kone fetchBuildingTopology', buildingTopology);
 
     return buildingTopology;
   } catch (err) {
@@ -243,8 +249,6 @@ export async function openWebSocketConnection(
     });
 
     ws.on('open', async (_event: any) => {
-      console.log('web socket connection opened ');
-      console.log(ws.url.split('?'));
       // Once the connection is open, resolve promise with the WebSocket instance
       ws.removeAllListeners('close');
       resolve(ws);
@@ -320,7 +324,7 @@ export async function connectWithSession(
   let incrementalRetryDelay: number;
 
   // Initialize new session with closed status
-  let session: WebSocketSession = new WebSocketSession();
+  const session: WebSocketSession = new WebSocketSession();
   session.connectionStatus = 'closed';
   session.accessToken = accessToken;
 

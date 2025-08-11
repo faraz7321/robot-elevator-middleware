@@ -16,6 +16,7 @@ import {
 import { plainToInstance } from 'class-transformer';
 import { AccessTokenService } from '../../auth/service/accessToken.service';
 import { BuildingTopology, WebSocketResponse } from '../../common/types';
+import { logIncoming, logOutgoing } from '../../common/logger';
 
 /**
  * Update these two variables with your own credentials or set them up as environment variables.
@@ -34,11 +35,6 @@ export class ElevatorService {
   async listElevators(
     request: ListElevatorsRequestDTO,
   ): Promise<ListElevatorsResponseDTO> {
-    console.log(
-      'Requested: /openapi/v5/lift/list on ' + new Date().toISOString(),
-    );
-    console.log(request);
-
     const response = new ListElevatorsResponseDTO();
 
     const accessToken = await this.accessTokenService.getAccessToken(
@@ -47,7 +43,9 @@ export class ElevatorService {
 
     let topology = this.buildingTopologyCache.get(request.placeId);
     if (!topology) {
+      logOutgoing('kone fetchBuildingTopology', { placeId: request.placeId });
       topology = await fetchBuildingTopology(accessToken, request.placeId);
+      logIncoming('kone fetchBuildingTopology', topology);
       this.buildingTopologyCache.set(request.placeId, topology);
     }
 
@@ -83,11 +81,6 @@ export class ElevatorService {
   async getLiftStatus(
     request: LiftStatusRequestDTO,
   ): Promise<LiftStatusResponseDTO> {
-    console.log(
-      'Requested: /openapi/v5/lift/status on ' + new Date().toISOString(),
-    );
-    console.log(request);
-
     const accessToken = await this.accessTokenService.getAccessToken(
       request.placeId,
     );
@@ -105,6 +98,7 @@ export class ElevatorService {
           lift: request.liftNo,
         },
       };
+      logOutgoing('kone websocket status', liftStatusPayload);
 
       const mode = await new Promise<string>((resolve, reject) => {
         const timer = setTimeout(() => {
@@ -118,6 +112,7 @@ export class ElevatorService {
               callType?: string;
               data?: { lift_mode?: string };
             };
+            logIncoming('kone websocket status', parsed);
             if (parsed.callType === 'status') {
               clearTimeout(timer);
               webSocketConnection.close();
@@ -167,11 +162,6 @@ export class ElevatorService {
   async callElevator(
     request: CallElevatorRequestDTO,
   ): Promise<CallElevatorResponseDTO> {
-    console.log(
-      'Requested: /openapi/v5/lift/call on ' + new Date().toISOString(),
-    );
-    console.log(request);
-
     const requestId = this.getRequestId();
     const accessToken = await this.accessTokenService.getAccessToken(
       request.placeId,
@@ -180,7 +170,9 @@ export class ElevatorService {
     const targetBuildingId = request.placeId;
     let topology = this.buildingTopologyCache.get(targetBuildingId);
     if (!topology) {
+      logOutgoing('kone fetchBuildingTopology', { placeId: targetBuildingId });
       topology = await fetchBuildingTopology(accessToken, targetBuildingId);
+      logIncoming('kone fetchBuildingTopology', topology);
       this.buildingTopologyCache.set(targetBuildingId, topology);
     }
     const targetGroupId = topology.groups?.[0]?.groupId.split(':').pop() || '1';
@@ -200,7 +192,7 @@ export class ElevatorService {
 
     // Open the WebSocket connection
     const webSocketConnection = await openWebSocketConnection(accessToken);
-    console.log('WebSocket open ' + new Date().toISOString());
+    logIncoming('kone websocket', { event: 'open' });
 
     type CallEvent = {
       callType: string;
@@ -212,7 +204,7 @@ export class ElevatorService {
       const onMessage = (data: string) => {
         try {
           const parsed = JSON.parse(data) as CallEvent;
-          console.log(parsed);
+          logIncoming('kone websocket action', parsed);
           if (
             parsed.callType === 'action' &&
             parsed.data?.request_id === requestId
@@ -246,7 +238,7 @@ export class ElevatorService {
         },
       },
     };
-    console.log(destinationCallPayload);
+    logOutgoing('kone websocket action', destinationCallPayload);
 
     // Send the request
     webSocketConnection.send(JSON.stringify(destinationCallPayload));
@@ -257,6 +249,7 @@ export class ElevatorService {
         waitForResponse(webSocketConnection, String(requestId)),
         callEventPromise,
       ]);
+    logIncoming('kone websocket acknowledgement', wsResponse);
 
     const response = new CallElevatorResponseDTO();
     if (callEvent.data?.success) {
@@ -277,11 +270,6 @@ export class ElevatorService {
 
   //TODO: Delay opening of elevator doors
   delayElevatorDoors(request: DelayDoorRequestDTO): BaseResponseDTO {
-    console.log(
-      'Requested: /openapi/v5/lift/open on ' + new Date().toISOString(),
-    );
-    console.log(request);
-
     const response = new BaseResponseDTO();
 
     response.errcode = 0;
@@ -292,11 +280,6 @@ export class ElevatorService {
 
   //TODO: Reserve or Cancel call
   reserveOrCancelCall(request: ReserveAndCancelRequestDTO): BaseResponseDTO {
-    console.log(
-      'Requested: /openapi/v5/lift/lock on ' + new Date().toISOString(),
-    );
-    console.log(request);
-
     const response = new BaseResponseDTO();
 
     response.errcode = 0;
