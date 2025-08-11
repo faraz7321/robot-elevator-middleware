@@ -1,5 +1,5 @@
 import { BaseResponseDTO } from '../../../baseDtos/BaseResponseDTO';
-import { IsNumber } from 'class-validator';
+import { IsNumber, IsString } from 'class-validator';
 
 export class CallElevatorResponseDTO extends BaseResponseDTO {
   @IsNumber()
@@ -7,4 +7,13 @@ export class CallElevatorResponseDTO extends BaseResponseDTO {
 
   @IsNumber()
   destination: number;
+
+  @IsString()
+  connectionId: string;
+
+  @IsNumber()
+  requestId: number;
+
+  @IsNumber()
+  statusCode: number;
 }

@@ -4,11 +4,13 @@ import { CallElevatorRequestDTO } from '../dtos/call/CallElevatorRequestDTO';
 import {
   fetchBuildingTopology,
   openWebSocketConnection,
+  waitForResponse,
 } from '../../common/koneapi';
 
 jest.mock('../../common/koneapi', () => ({
   fetchBuildingTopology: jest.fn(),
   openWebSocketConnection: jest.fn(),
+  waitForResponse: jest.fn(),
 }));
 
 describe('ElevatorService callElevator', () => {
@@ -16,29 +18,49 @@ describe('ElevatorService callElevator', () => {
   const accessTokenService = {
     getAccessToken: jest.fn().mockResolvedValue('token'),
   } as unknown as AccessTokenService;
+  let getLiftStatusMock: jest.Mock;
 
   beforeEach(() => {
     service = new ElevatorService(accessTokenService);
-    jest.spyOn<any, any>(service, 'getRequestId').mockReturnValue(123);
-    (service as any).getLiftStatus = jest
+    jest.spyOn(service as any, 'getRequestId').mockReturnValue(123);
+    getLiftStatusMock = jest
       .fn()
       .mockResolvedValue({ result: [{ mode: 'NOR' }] });
+    Object.assign(service, { getLiftStatus: getLiftStatusMock });
     (fetchBuildingTopology as jest.Mock).mockResolvedValue({
       groups: [{ groupId: 'gid:1', lifts: [] }],
       areas: [],
     });
+    (waitForResponse as jest.Mock).mockResolvedValue({
+      connectionId: 'conn-123',
+      requestId: '123',
+      statusCode: 201,
+      type: 'ok',
+      data: { time: '2025-07-28T05:11:19.893Z' },
+    });
     (openWebSocketConnection as jest.Mock).mockImplementation(() => {
-      const ws: any = {
-        handler: null,
-        on: function (event: string, cb: any) {
-          if (event === 'message') this.handler = cb;
+      const ws: {
+        handler?: (data: string) => void;
+        on: (event: string, cb: (data: string) => void) => void;
+        off: (event: string, cb: (data: string) => void) => void;
+        send: () => void;
+        close: jest.Mock;
+      } = {
+        handler: undefined,
+        on: (event, cb) => {
+          if (event === 'message') ws.handler = cb;
         },
-        send: function () {
+        off: (event, cb) => {
+          if (event === 'message' && ws.handler === cb) {
+            ws.handler = undefined;
+          }
+        },
+        send: () => {
           const res = {
             callType: 'action',
             data: { request_id: 123, success: true, session_id: 99 },
           };
-          this.handler(JSON.stringify(res));
+          ws.handler?.(JSON.stringify(res));
         },
         close: jest.fn(),
       };
@@ -58,10 +80,12 @@ describe('ElevatorService callElevator', () => {
     expect(res.errcode).toBe(0);
     expect(res.sessionId).toBe(99);
     expect(res.destination).toBe(5);
+    expect(res.connectionId).toBe('conn-123');
+    expect(res.requestId).toBe(123);
   });
 
   it('rejects call when in non-operational mode', async () => {
-    (service as any).getLiftStatus.mockResolvedValue({
+    getLiftStatusMock.mockResolvedValue({
       result: [{ mode: 'FRD' }],
     });
     const req = new CallElevatorRequestDTO();

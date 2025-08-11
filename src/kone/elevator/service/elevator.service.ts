@@ -11,10 +11,11 @@ import { CallElevatorResponseDTO } from '../dtos/call/CallElevatorResponseDTO';
 import {
   fetchBuildingTopology,
   openWebSocketConnection,
+  waitForResponse,
 } from '../../common/koneapi';
 import { plainToInstance } from 'class-transformer';
 import { AccessTokenService } from '../../auth/service/accessToken.service';
-import { BuildingTopology } from '../../common/types';
+import { BuildingTopology, WebSocketResponse } from '../../common/types';
 
 /**
  * Update these two variables with your own credentials or set them up as environment variables.
@@ -96,7 +97,7 @@ export class ElevatorService {
     try {
       const webSocketConnection = await openWebSocketConnection(accessToken);
 
-      const liftStatusPayload: any = {
+      const liftStatusPayload = {
         type: 'lift-call-api-v2',
         buildingId: request.placeId,
         callType: 'status',
@@ -113,7 +114,10 @@ export class ElevatorService {
 
         webSocketConnection.on('message', (data: string) => {
           try {
-            const parsed = JSON.parse(data);
+            const parsed = JSON.parse(data) as {
+              callType?: string;
+              data?: { lift_mode?: string };
+            };
             if (parsed.callType === 'status') {
               clearTimeout(timer);
               webSocketConnection.close();
@@ -122,7 +126,7 @@ export class ElevatorService {
           } catch (err) {
             clearTimeout(timer);
             webSocketConnection.close();
-            reject(err);
+            reject(err instanceof Error ? err : new Error(String(err)));
           }
         });
 
@@ -196,67 +200,77 @@ export class ElevatorService {
 
     // Open the WebSocket connection
     const webSocketConnection = await openWebSocketConnection(accessToken);
-    console.log('WebSocket open ' + new Date());
+    console.log('WebSocket open ' + new Date().toISOString());
 
-    // Add handler for incoming messages
-    // const response: BaseResponseDTO = await  webSocketConnection.on('message', this.onWebSocketMessage);
+    type CallEvent = {
+      callType: string;
+      data?: { request_id: number; success: boolean; session_id: number };
+    };
 
-    const response: CallElevatorResponseDTO = await new Promise(
-      (resolve, reject) => {
-        // Listen once for message event
-        webSocketConnection.on('message', (data: string) => {
-          const res = new CallElevatorResponseDTO();
-          try {
-            const parsed = JSON.parse(data);
-            console.log(parsed);
-            if (
-              parsed.callType === 'action' &&
-              parsed.data?.request_id === requestId
-            ) {
-              const res = new CallElevatorResponseDTO();
-              if (parsed.data?.success) {
-                res.errcode = 0;
-                res.errmsg = 'SUCCESS';
-                res.sessionId = parsed.data?.session_id;
-                res.destination = request.toFloor;
-              } else {
-                res.errcode = 1;
-                res.errmsg = 'FAILURE';
-              }
-              resolve(res);
-            }
-          } catch (err) {
-            reject(err);
+    // Promise for call event carrying session information
+    const callEventPromise = new Promise<CallEvent>((resolve, reject) => {
+      const onMessage = (data: string) => {
+        try {
+          const parsed = JSON.parse(data) as CallEvent;
+          console.log(parsed);
+          if (
+            parsed.callType === 'action' &&
+            parsed.data?.request_id === requestId
+          ) {
+            webSocketConnection.off('message', onMessage);
+            resolve(parsed);
           }
-        });
+        } catch (err) {
+          webSocketConnection.off('message', onMessage);
+          reject(err instanceof Error ? err : new Error(String(err)));
+        }
+      };
+      webSocketConnection.on('message', onMessage);
+    });
 
-        // Build the call payload using the areas previously generated
-        const destinationCallPayload: any = {
-          type: 'lift-call-api-v2',
-          buildingId: targetBuildingId,
-          callType: 'action',
-          groupId: targetGroupId,
-          payload: {
-            request_id: requestId,
-            area: request.fromFloor, //current floor
-            time: new Date().toISOString(),
-            terminal: 1,
-            // terminal: 10011,
-            call: {
-              action: 3,
-              destination: request.toFloor,
-            },
-          },
-        };
-        console.log(destinationCallPayload);
-
-        // Send the request
-        webSocketConnection.send(JSON.stringify(destinationCallPayload));
+    // Build the call payload using the areas previously generated
+    const destinationCallPayload = {
+      type: 'lift-call-api-v2',
+      buildingId: targetBuildingId,
+      callType: 'action',
+      groupId: targetGroupId,
+      payload: {
+        request_id: requestId,
+        area: request.fromFloor, //current floor
+        time: new Date().toISOString(),
+        terminal: 1,
+        // terminal: 10011,
+        call: {
+          action: 3,
+          destination: request.toFloor,
+        },
       },
-    );
+    };
+    console.log(destinationCallPayload);
 
-    // execute the call within the open WebSocket connection
-    // webSocketConnection.send(JSON.stringify(destinationCallPayload));
+    // Send the request
+    webSocketConnection.send(JSON.stringify(destinationCallPayload));
+
+    // Wait for both acknowledgement and call event
+    const [wsResponse, callEvent]: [WebSocketResponse, CallEvent] =
+      await Promise.all([
+        waitForResponse(webSocketConnection, String(requestId)),
+        callEventPromise,
+      ]);
+
+    const response = new CallElevatorResponseDTO();
+    if (callEvent.data?.success) {
+      response.errcode = 0;
+      response.errmsg = 'SUCCESS';
+      response.sessionId = callEvent.data?.session_id;
+      response.destination = request.toFloor;
+    } else {
+      response.errcode = 1;
+      response.errmsg = 'FAILURE';
+    }
+    response.connectionId = wsResponse.connectionId;
+    response.requestId = Number(wsResponse.requestId);
+    response.statusCode = wsResponse.statusCode;
 
     return plainToInstance(CallElevatorResponseDTO, response);
   }
