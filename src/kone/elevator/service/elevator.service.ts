@@ -79,26 +79,84 @@ export class ElevatorService {
     return response;
   }
 
-  //TODO: Get lift Status
-  getLiftStatus(request: LiftStatusRequestDTO): LiftStatusResponseDTO {
+  // Fetch lift status via WebSocket API
+  async getLiftStatus(
+    request: LiftStatusRequestDTO,
+  ): Promise<LiftStatusResponseDTO> {
     console.log(
       'Requested: /openapi/v5/lift/status on ' + new Date().toISOString(),
     );
     console.log(request);
 
-    const response = new LiftStatusResponseDTO();
-    response.result = [
-      {
-        liftNo: 1,
-        floor: 4, //need to implement this
-        state: 0,
-        prevDirection: 2,
-        liftDoorStatus: 2,
-      },
-    ];
+    const accessToken = await this.accessTokenService.getAccessToken(
+      request.placeId,
+    );
 
-    response.errcode = 0;
-    response.errmsg = 'SUCCESS';
+    const response = new LiftStatusResponseDTO();
+
+    try {
+      const webSocketConnection = await openWebSocketConnection(accessToken);
+
+      const liftStatusPayload: any = {
+        type: 'lift-call-api-v2',
+        buildingId: request.placeId,
+        callType: 'status',
+        payload: {
+          lift: request.liftNo,
+        },
+      };
+
+      const mode = await new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          webSocketConnection.close();
+          resolve('UNKNOWN');
+        }, 2000);
+
+        webSocketConnection.on('message', (data: string) => {
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.callType === 'status') {
+              clearTimeout(timer);
+              webSocketConnection.close();
+              resolve(parsed.data?.lift_mode ?? 'UNKNOWN');
+            }
+          } catch (err) {
+            clearTimeout(timer);
+            webSocketConnection.close();
+            reject(err);
+          }
+        });
+
+        webSocketConnection.send(JSON.stringify(liftStatusPayload));
+      });
+
+      response.result = [
+        {
+          liftNo: request.liftNo,
+          floor: 0,
+          state: 0,
+          prevDirection: 0,
+          liftDoorStatus: 0,
+          mode,
+        },
+      ];
+      response.errcode = 0;
+      response.errmsg = 'SUCCESS';
+    } catch (err) {
+      console.error('Failed to fetch lift status', err);
+      response.result = [
+        {
+          liftNo: request.liftNo,
+          floor: 0,
+          state: 0,
+          prevDirection: 0,
+          liftDoorStatus: 0,
+          mode: 'UNKNOWN',
+        },
+      ];
+      response.errcode = 1;
+      response.errmsg = 'FAILED';
+    }
 
     return response;
   }
@@ -124,6 +182,19 @@ export class ElevatorService {
     }
     const targetGroupId =
       topology.groups?.[0]?.groupId.split(':').pop() || '1';
+
+    // Check lift operational mode before sending call
+    const liftStatus = await this.getLiftStatus(
+      request as unknown as LiftStatusRequestDTO,
+    );
+    const mode = liftStatus.result?.[0]?.mode;
+    const NON_OPERATIONAL_MODES = ['FRD', 'OSS', 'ATS', 'PRC'];
+    if (mode && NON_OPERATIONAL_MODES.includes(String(mode))) {
+      const res = new BaseResponseDTO();
+      res.errcode = 1;
+      res.errmsg = `Lift in ${mode} mode`;
+      return res;
+    }
 
     // Open the WebSocket connection
     const webSocketConnection = await openWebSocketConnection(accessToken);
