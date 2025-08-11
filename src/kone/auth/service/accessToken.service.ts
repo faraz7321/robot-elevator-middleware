@@ -1,8 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import axios from 'axios';
 import {
   fetchAccessToken,
-  openWebSocketConnection,
   validateClientIdAndClientSecret,
 } from '../../common/koneapi';
 import { AccessTokenData } from '../dto/AccessTokenData';
@@ -24,8 +22,8 @@ export class AccessTokenService {
       this.KONE_CLIENT_ID,
       this.KONE_CLIENT_SECRET,
     );
-    let scopes = this.getScopes(placeId);
-    let existingAccessToken: AccessTokenData | undefined =
+    const scopes = this.getScopes(placeId);
+    const existingAccessToken: AccessTokenData | undefined =
       this.scopeToTokenMap.get(scopes.join(' '));
     if (existingAccessToken && Date.now() < existingAccessToken.expiresAt) {
       // Token is still valid

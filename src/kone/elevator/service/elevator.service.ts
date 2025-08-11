@@ -190,6 +190,19 @@ export class ElevatorService {
       return res;
     }
 
+    // Map human-readable floor numbers to KONE area identifiers
+    const areaMap = new Map<number, number>();
+    topology.areas?.forEach((area) => {
+      const floorNum = Number(area.shortName);
+      const areaIdNum = Number(area.areaId.split(':').pop());
+      if (!isNaN(floorNum) && !isNaN(areaIdNum)) {
+        areaMap.set(floorNum, areaIdNum);
+      }
+    });
+
+    const fromArea = areaMap.get(request.fromFloor) ?? request.fromFloor * 1000;
+    const toArea = areaMap.get(request.toFloor) ?? request.toFloor * 1000;
+
     // Open the WebSocket connection
     const webSocketConnection = await openWebSocketConnection(accessToken);
     logIncoming('kone websocket', { event: 'open' });
@@ -228,13 +241,13 @@ export class ElevatorService {
       groupId: targetGroupId,
       payload: {
         request_id: requestId,
-        area: request.fromFloor, //current floor
+        area: fromArea, //current floor
         time: new Date().toISOString(),
         terminal: 1,
         // terminal: 10011,
         call: {
           action: 3,
-          destination: request.toFloor,
+          destination: toArea,
         },
       },
     };

@@ -1,5 +1,11 @@
 import { BaseResponseDTO } from '../../../baseDtos/BaseResponseDTO';
-import { IsArray, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ListElevatorsResultDTO } from './StatusElevatorsResultDTO';
 

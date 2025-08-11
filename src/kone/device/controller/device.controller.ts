@@ -1,4 +1,10 @@
-import { Body, Controller, Get, Post, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { DeviceService } from '../service/device.service';
 import { RegisterDeviceRequestDTO } from '../dto/register/RegisterDeviceRequestDTO';
 import { RegisterDeviceResponseDTO } from '../dto/register/RegisterDeviceResponseDTO';

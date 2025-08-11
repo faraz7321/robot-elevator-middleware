@@ -41,7 +41,7 @@ export class ElevatorController {
   }
 
   @Post('call')
-  async call(
+  async callElevator(
     @Body() request: CallElevatorRequestDTO,
   ): Promise<CallElevatorResponseDTO> {
     logIncoming('robot /openapi/v5/lift/call', request);

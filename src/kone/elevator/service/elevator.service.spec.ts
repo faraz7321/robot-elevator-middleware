@@ -43,7 +43,7 @@ describe('ElevatorService callElevator', () => {
         handler?: (data: string) => void;
         on: (event: string, cb: (data: string) => void) => void;
         off: (event: string, cb: (data: string) => void) => void;
-        send: () => void;
+        send: jest.Mock;
         close: jest.Mock;
       } = {
         handler: undefined,
@@ -55,13 +55,14 @@ describe('ElevatorService callElevator', () => {
             ws.handler = undefined;
           }
         },
-        send: () => {
+        send: jest.fn((payload) => {
           const res = {
             callType: 'action',
             data: { request_id: 123, success: true, session_id: 99 },
           };
           ws.handler?.(JSON.stringify(res));
-        },
+          return payload;
+        }),
         close: jest.fn(),
       };
       return ws;
@@ -82,6 +83,11 @@ describe('ElevatorService callElevator', () => {
     expect(res.destination).toBe(5);
     expect(res.connectionId).toBe('conn-123');
     expect(res.requestId).toBe(123);
+    const sendArg = (openWebSocketConnection as jest.Mock).mock.results[0].value
+      .send.mock.calls[0][0];
+    const sent = JSON.parse(sendArg);
+    expect(sent.payload.area).toBe(1000);
+    expect(sent.payload.call.destination).toBe(3000);
   });
 
   it('rejects call when in non-operational mode', async () => {

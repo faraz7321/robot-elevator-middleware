@@ -1,12 +1,10 @@
-
 export class AccessTokenData {
+  constructor(accessToken: string, expiresAt: number) {
+    this.accessToken = accessToken;
+    this.expiresAt = expiresAt;
+  }
 
-    constructor(accessToken: string, expiresAt: number) {
-        this.accessToken = accessToken;
-        this.expiresAt = expiresAt;
-    }
+  accessToken: string;
 
-    accessToken: string;
-
-    expiresAt: number;
+  expiresAt: number;
 }

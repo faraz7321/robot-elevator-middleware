@@ -129,8 +129,8 @@ describe('ElevatorController', () => {
       appname,
       ts,
       liftNo,
-      fromFloor: 2000,
-      toFloor: 3000,
+      fromFloor: 2,
+      toFloor: 3,
     };
     const sign = generateSign(body, appname, appSecret, ts);
     const check = generateCheck(deviceUuid, ts, deviceSecret);
