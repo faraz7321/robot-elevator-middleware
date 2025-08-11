@@ -18,9 +18,9 @@ export class ElevatorController {
   constructor(private readonly elevatorService: ElevatorService) {}
 
   @Post('list')
-  listElevators(
+  async listElevators(
     @Body() request: ListElevatorsRequestDTO,
-  ): ListElevatorsResponseDTO {
+  ): Promise<ListElevatorsResponseDTO> {
     validateSignedRequest(request);
     return this.elevatorService.listElevators(request);
   }
