@@ -28,7 +28,6 @@ export class ElevatorService {
     return Math.floor(Math.random() * 1000000000);
   }
 
-  //TODO: Get elevator list (logic needs to be implemented in middleware)
   private buildingTopologyCache: Map<string, BuildingTopology> = new Map();
 
   async listElevators(
@@ -180,8 +179,7 @@ export class ElevatorService {
       topology = await fetchBuildingTopology(accessToken, targetBuildingId);
       this.buildingTopologyCache.set(targetBuildingId, topology);
     }
-    const targetGroupId =
-      topology.groups?.[0]?.groupId.split(':').pop() || '1';
+    const targetGroupId = topology.groups?.[0]?.groupId.split(':').pop() || '1';
 
     // Check lift operational mode before sending call
     const liftStatus = await this.getLiftStatus(

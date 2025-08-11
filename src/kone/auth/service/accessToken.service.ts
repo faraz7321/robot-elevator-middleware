@@ -9,7 +9,8 @@ import { AccessTokenData } from '../dto/AccessTokenData';
 
 @Injectable()
 export class AccessTokenService {
-  private KONE_CLIENT_ID: string = process.env.KONE_CLIENT_ID || 'YOUR_CLIENT_ID';
+  private KONE_CLIENT_ID: string =
+    process.env.KONE_CLIENT_ID || 'YOUR_CLIENT_ID';
   private KONE_CLIENT_SECRET: string =
     process.env.KONE_CLIENT_SECRET || 'YOUR_CLIENT_SECRET';
 
@@ -19,7 +20,10 @@ export class AccessTokenService {
   >();
 
   async getAccessToken(placeId: string): Promise<string> {
-    validateClientIdAndClientSecret(this.KONE_CLIENT_ID, this.KONE_CLIENT_SECRET);
+    validateClientIdAndClientSecret(
+      this.KONE_CLIENT_ID,
+      this.KONE_CLIENT_SECRET,
+    );
     let scopes = this.getScopes(placeId);
     let existingAccessToken: AccessTokenData | undefined =
       this.scopeToTokenMap.get(scopes.join(' '));

@@ -17,9 +17,8 @@ export function generateCheck(
   ts: number,
   deviceSecret: string,
 ): string {
-  const payload = `${deviceUuid}|${ts}|${deviceSecret}`;
-  console.log('CHECK PAYLOAD:', payload);
-  return md5(payload);
+  //console.log('CHECK PAYLOAD:', payload);
+  return md5(`${deviceUuid}|${ts}|${deviceSecret}`);
 }
 
 export function generateSign(
