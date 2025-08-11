@@ -26,7 +26,9 @@ export class ElevatorController {
   }
 
   @Post('status')
-  getLiftStatus(@Body() request: LiftStatusRequestDTO): LiftStatusResponseDTO {
+  async getLiftStatus(
+    @Body() request: LiftStatusRequestDTO,
+  ): Promise<LiftStatusResponseDTO> {
     validateSignedRequest(request);
     return this.elevatorService.getLiftStatus(request);
   }

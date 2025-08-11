@@ -1,5 +1,5 @@
 import { BaseResponseDTO } from '../../../baseDtos/BaseResponseDTO';
-import { IsArray, IsNumber, ValidateNested } from 'class-validator';
+import { IsArray, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ListElevatorsResultDTO } from './StatusElevatorsResultDTO';
 
@@ -23,4 +23,8 @@ export class LiftStatusResponseDTO extends BaseResponseDTO {
 
   @IsNumber()
   liftDoorStatus: number;
+
+  @IsOptional()
+  @IsString()
+  mode?: string;
 }
