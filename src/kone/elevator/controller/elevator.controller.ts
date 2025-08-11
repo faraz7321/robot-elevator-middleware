@@ -10,7 +10,7 @@ import { ListElevatorsRequestDTO } from '../dtos/list/ListElevatorsRequestDTO';
 import { ListElevatorsResponseDTO } from '../dtos/list/ListElevatorsResponseDTO';
 import { validateSignedRequest } from '../../common/verify-signature';
 import * as dotenv from 'dotenv';
-
+import { CallElevatorResponseDTO } from '../dtos/call/CallElevatorResponseDTO';
 dotenv.config();
 
 @Controller('lift')
@@ -36,7 +36,7 @@ export class ElevatorController {
   @Post('call')
   async call(
     @Body() request: CallElevatorRequestDTO,
-  ): Promise<BaseResponseDTO> {
+  ): Promise<CallElevatorResponseDTO> {
     validateSignedRequest(request);
 
     return this.elevatorService.callElevator(request);

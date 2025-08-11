@@ -7,7 +7,7 @@ import { DelayDoorRequestDTO } from '../dtos/delay/DelayDoorRequestDTO';
 import { ReserveAndCancelRequestDTO } from '../dtos/reserve/ReserveAndCancelRequestDTO';
 import { ListElevatorsRequestDTO } from '../dtos/list/ListElevatorsRequestDTO';
 import { ListElevatorsResponseDTO } from '../dtos/list/ListElevatorsResponseDTO';
-
+import { CallElevatorResponseDTO } from '../dtos/call/CallElevatorResponseDTO';
 import {
   fetchBuildingTopology,
   openWebSocketConnection,
@@ -162,7 +162,7 @@ export class ElevatorService {
 
   async callElevator(
     request: CallElevatorRequestDTO,
-  ): Promise<BaseResponseDTO> {
+  ): Promise<CallElevatorResponseDTO> {
     console.log(
       'Requested: /openapi/v5/lift/call on ' + new Date().toISOString(),
     );
@@ -188,7 +188,7 @@ export class ElevatorService {
     const mode = liftStatus.result?.[0]?.mode;
     const NON_OPERATIONAL_MODES = ['FRD', 'OSS', 'ATS', 'PRC'];
     if (mode && NON_OPERATIONAL_MODES.includes(String(mode))) {
-      const res = new BaseResponseDTO();
+      const res = new CallElevatorResponseDTO();
       res.errcode = 1;
       res.errmsg = `Lift in ${mode} mode`;
       return res;
@@ -201,60 +201,64 @@ export class ElevatorService {
     // Add handler for incoming messages
     // const response: BaseResponseDTO = await  webSocketConnection.on('message', this.onWebSocketMessage);
 
-    const response: BaseResponseDTO = await new Promise((resolve, reject) => {
-      // Listen once for message event
-      webSocketConnection.on('message', (data: string) => {
-        const res = new BaseResponseDTO();
-        try {
-          const parsed = JSON.parse(data);
-          console.log(parsed);
-          if (
-            parsed.callType === 'action' &&
-            parsed.data?.request_id === requestId
-          ) {
-            const res = new BaseResponseDTO();
-            if (parsed.data?.success) {
-              res.errcode = 0;
-              res.errmsg = 'SUCCESS';
-            } else {
-              res.errcode = 1;
-              res.errmsg = 'FAILURE';
+    const response: CallElevatorResponseDTO = await new Promise(
+      (resolve, reject) => {
+        // Listen once for message event
+        webSocketConnection.on('message', (data: string) => {
+          const res = new CallElevatorResponseDTO();
+          try {
+            const parsed = JSON.parse(data);
+            console.log(parsed);
+            if (
+              parsed.callType === 'action' &&
+              parsed.data?.request_id === requestId
+            ) {
+              const res = new CallElevatorResponseDTO();
+              if (parsed.data?.success) {
+                res.errcode = 0;
+                res.errmsg = 'SUCCESS';
+                res.sessionId = parsed.data?.session_id;
+                res.destination = request.toFloor;
+              } else {
+                res.errcode = 1;
+                res.errmsg = 'FAILURE';
+              }
+              resolve(res);
             }
-            resolve(res);
+          } catch (err) {
+            reject(err);
           }
-        } catch (err) {
-          reject(err);
-        }
-      });
+        });
 
-      // Build the call payload using the areas previously generated
-      const destinationCallPayload: any = {
-        type: 'lift-call-api-v2',
-        buildingId: targetBuildingId,
-        callType: 'action',
-        groupId: targetGroupId,
-        payload: {
-          request_id: requestId,
-          area: request.fromFloor, //current floor
-          time: new Date().toISOString(),
-          terminal: 1,
-          // terminal: 10011,
-          call: {
-            action: 3,
-            destination: request.toFloor,
+        // Build the call payload using the areas previously generated
+        const destinationCallPayload: any = {
+          type: 'lift-call-api-v2',
+          buildingId: targetBuildingId,
+          callType: 'action',
+          groupId: targetGroupId,
+          payload: {
+            request_id: requestId,
+            area: request.fromFloor, //current floor
+            time: new Date().toISOString(),
+            terminal: 1,
+            // terminal: 10011,
+            call: {
+              action: 3,
+              destination: request.toFloor,
+            },
           },
-        },
-      };
-      console.log(destinationCallPayload);
+        };
+        console.log(destinationCallPayload);
 
-      // Send the request
-      webSocketConnection.send(JSON.stringify(destinationCallPayload));
-    });
+        // Send the request
+        webSocketConnection.send(JSON.stringify(destinationCallPayload));
+      },
+    );
 
     // execute the call within the open WebSocket connection
     // webSocketConnection.send(JSON.stringify(destinationCallPayload));
 
-    return plainToInstance(BaseResponseDTO, response);
+    return plainToInstance(CallElevatorResponseDTO, response);
   }
 
   //TODO: Delay opening of elevator doors
