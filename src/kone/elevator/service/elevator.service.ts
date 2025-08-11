@@ -268,23 +268,126 @@ export class ElevatorService {
     return plainToInstance(CallElevatorResponseDTO, response);
   }
 
-  //TODO: Delay opening of elevator doors
-  delayElevatorDoors(request: DelayDoorRequestDTO): BaseResponseDTO {
+  // Delay opening of elevator doors
+  async delayElevatorDoors(
+    request: DelayDoorRequestDTO,
+  ): Promise<BaseResponseDTO> {
     const response = new BaseResponseDTO();
+    try {
+      const requestId = this.getRequestId();
+      const accessToken = await this.accessTokenService.getAccessToken(
+        request.placeId,
+      );
 
-    response.errcode = 0;
-    response.errmsg = 'SUCCESS';
+      let topology = this.buildingTopologyCache.get(request.placeId);
+      if (!topology) {
+        logOutgoing('kone fetchBuildingTopology', { placeId: request.placeId });
+        topology = await fetchBuildingTopology(accessToken, request.placeId);
+        logIncoming('kone fetchBuildingTopology', topology);
+        this.buildingTopologyCache.set(request.placeId, topology);
+      }
+      const group = topology.groups?.[0];
+      const targetGroupId = group?.groupId.split(':').pop() || '1';
+      const lift = group?.lifts.find(
+        (l) => Number(l.liftId.split(':').pop()) === request.liftNo,
+      );
+      const deck = lift?.decks?.[0];
+      const servedArea = deck?.areasServed?.[0] || 0;
 
+      const webSocketConnection = await openWebSocketConnection(accessToken);
+      const holdOpenPayload = {
+        type: 'lift-call-api-v2',
+        buildingId: request.placeId,
+        groupId: targetGroupId,
+        callType: 'hold_open',
+        payload: {
+          request_id: requestId,
+          area: servedArea,
+          time: new Date().toISOString(),
+          terminal: 1,
+          lift_deck: deck?.deckAreaId,
+          served_area: servedArea,
+          soft_time: request.seconds,
+        },
+      };
+      logOutgoing('kone websocket hold_open', holdOpenPayload);
+      webSocketConnection.send(JSON.stringify(holdOpenPayload));
+
+      const wsResponse = await waitForResponse(
+        webSocketConnection,
+        String(requestId),
+      );
+      logIncoming('kone websocket acknowledgement', wsResponse);
+      webSocketConnection.close();
+
+      response.errcode = wsResponse.statusCode === 200 ? 0 : 1;
+      response.errmsg = wsResponse.statusCode === 200 ? 'SUCCESS' : 'FAILURE';
+    } catch (err) {
+      console.error('Failed to delay elevator doors', err);
+      response.errcode = 1;
+      response.errmsg = 'FAILED';
+    }
     return response;
   }
 
-  //TODO: Reserve or Cancel call
-  reserveOrCancelCall(request: ReserveAndCancelRequestDTO): BaseResponseDTO {
+  // Reserve or Cancel call
+  async reserveOrCancelCall(
+    request: ReserveAndCancelRequestDTO,
+  ): Promise<BaseResponseDTO> {
     const response = new BaseResponseDTO();
+    try {
+      const requestId = this.getRequestId();
+      const accessToken = await this.accessTokenService.getAccessToken(
+        request.placeId,
+      );
 
-    response.errcode = 0;
-    response.errmsg = 'SUCCESS';
+      let topology = this.buildingTopologyCache.get(request.placeId);
+      if (!topology) {
+        logOutgoing('kone fetchBuildingTopology', { placeId: request.placeId });
+        topology = await fetchBuildingTopology(accessToken, request.placeId);
+        logIncoming('kone fetchBuildingTopology', topology);
+        this.buildingTopologyCache.set(request.placeId, topology);
+      }
+      const group = topology.groups?.[0];
+      const targetGroupId = group?.groupId.split(':').pop() || '1';
+      const lift = group?.lifts.find(
+        (l) => Number(l.liftId.split(':').pop()) === request.liftNo,
+      );
+      const area = lift?.floors?.[0]?.areasServed?.[0] || 0;
 
+      const webSocketConnection = await openWebSocketConnection(accessToken);
+      const actionPayload = {
+        type: 'lift-call-api-v2',
+        buildingId: request.placeId,
+        groupId: targetGroupId,
+        callType: 'action',
+        payload: {
+          request_id: requestId,
+          area,
+          time: new Date().toISOString(),
+          terminal: 1,
+          call: {
+            action: request.locked ? 22 : 23,
+          },
+        },
+      };
+      logOutgoing('kone websocket action', actionPayload);
+      webSocketConnection.send(JSON.stringify(actionPayload));
+
+      const wsResponse = await waitForResponse(
+        webSocketConnection,
+        String(requestId),
+      );
+      logIncoming('kone websocket acknowledgement', wsResponse);
+      webSocketConnection.close();
+
+      response.errcode = wsResponse.statusCode === 200 ? 0 : 1;
+      response.errmsg = wsResponse.statusCode === 200 ? 'SUCCESS' : 'FAILURE';
+    } catch (err) {
+      console.error('Failed to reserve or cancel call', err);
+      response.errcode = 1;
+      response.errmsg = 'FAILED';
+    }
     return response;
   }
 }
