@@ -4,9 +4,9 @@ import request from 'supertest';
 import { ElevatorController } from './elevator.controller';
 import { ElevatorService } from '../service/elevator.service';
 import { DeviceService } from '../../device/service/device.service';
-import axios from 'axios';
 import * as crypto from 'crypto';
 import * as process from 'node:process';
+import { validateSignedRequest } from '../../common/verify-signature';
 
 // Set required environment variables for tests
 const deviceUuid = 'device-uuid';
@@ -22,11 +22,7 @@ function md5(input: string): string {
 }
 
 // === Input values
-const deviceMac = '112233445575';
-const liftNos = [1];
 const liftNo = 1;
-const endpoint =
-  process.env.ROBOT_API_BASE || 'http://localhost:3000/openapi/v5/lift/open';
 
 function generateCheck(
   deviceUuid: string,
@@ -57,8 +53,6 @@ function generateSign(
 jest.mock('../../common/verify-signature', () => ({
   validateSignedRequest: jest.fn(),
 }));
-
-const { validateSignedRequest } = require('../../common/verify-signature');
 
 describe('ElevatorController', () => {
   let app: INestApplication;

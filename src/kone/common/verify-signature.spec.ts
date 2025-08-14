@@ -6,15 +6,15 @@ const originalEnv = {
 process.env.ELEVATOR_APP_NAME = 'testApp';
 process.env.ELEVATOR_APP_SECRET = 'appSecret';
 
-const {
+import {
   generateSign,
   generateCheck,
   isValidRequest,
-} = require('./verify-signature');
+} from './verify-signature';
 
 describe('verify-signature', () => {
-  const appname = process.env.ELEVATOR_APP_NAME;
-  const appSecret = process.env.ELEVATOR_APP_SECRET;
+  const appname = process.env.ELEVATOR_APP_NAME as string;
+  const appSecret = process.env.ELEVATOR_APP_SECRET as string;
   const deviceSecret = 'deviceSecret';
   const deviceUuid = 'device-123';
 

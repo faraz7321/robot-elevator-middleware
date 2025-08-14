@@ -44,7 +44,9 @@ const WEBSOCKET_SUBPROTOCOL = process.env.WEBSOCKET_SUBPROTOCOL || 'koneapi';
 /**
  * Fetch the token using the client-credentials flow. In this case, we assume that the user wants to fetch a token
  * that will be used to receive the accessible buildings. Once the user knows the building of interest,
- * a new token has to be generated with the correct callgiving/BUILDING_ID in scope.
+ * a new token has to be generated with group-level scopes like
+ * robotcall/group:BUILDING_ID:GROUP_ID, callgiving/group:BUILDING_ID:GROUP_ID,
+ * and topology/group:BUILDING_ID:GROUP_ID.
  * That is why in the start() flow, this function is invoked twice.
  *
  * @param {string} clientId

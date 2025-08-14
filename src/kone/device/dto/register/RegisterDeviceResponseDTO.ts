@@ -1,5 +1,5 @@
 import { RegisterDeviceResultDTO } from './RegisterDeviceResultDTO';
-import { IsArray, IsNumber, IsString, ValidateNested } from 'class-validator';
+import { IsArray, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { BaseResponseDTO } from '../../../baseDtos/BaseResponseDTO';
 

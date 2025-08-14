@@ -1,11 +1,4 @@
-import {
-  IsString,
-  IsArray,
-  IsOptional,
-  IsNumber,
-  Length,
-  IsNotEmpty,
-} from 'class-validator';
+import { IsString, IsArray } from 'class-validator';
 import { DeviceBaseRequestDTO } from '../DeviceBaseRequestDTO';
 
 export class BindDeviceRequestDTO extends DeviceBaseRequestDTO {

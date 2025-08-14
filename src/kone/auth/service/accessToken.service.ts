@@ -45,14 +45,15 @@ export class AccessTokenService {
     return accessTokenData.access_token;
   }
 
-  private getScopes(placeId: string): string[] {
+  private getScopes(buildingId: string): string[] {
     const scopes = ['application/inventory'];
-    if (placeId.startsWith(BUILDING_ID_PREFIX)) {
-      const id = placeId.slice(BUILDING_ID_PREFIX.length);
-      scopes.push(`topology/building:${id}`);
-    } else {
-      scopes.push(`callgiving/group:${placeId}:1`);
-    }
+    const id = buildingId.startsWith(BUILDING_ID_PREFIX)
+      ? buildingId.slice(BUILDING_ID_PREFIX.length)
+      : buildingId;
+    const groupId = 1;
+    scopes.push(`robotcall/group:${id}:${groupId}`);
+    scopes.push(`callgiving/group:${id}:${groupId}`);
+    scopes.push(`topology/group:${id}:${groupId}`);
     return scopes;
   }
 }
