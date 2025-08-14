@@ -56,6 +56,11 @@ jest.mock('../../common/verify-signature', () => ({
   validateRegisterRequest: jest.fn(),
 }));
 
+const {
+  validateSignedRequest,
+  validateRegisterRequest,
+} = require('../../common/verify-signature');
+
 describe('DeviceController', () => {
   let app: INestApplication;
 
@@ -99,6 +104,8 @@ describe('DeviceController', () => {
 
     expect(response.body).toEqual(res);
     expect(deviceService.registerDevice).toHaveBeenCalledWith(req);
+    expect(validateRegisterRequest).toHaveBeenCalledWith(req);
+    expect(validateSignedRequest).not.toHaveBeenCalled();
   });
 
   it('binds a device', async () => {
@@ -117,6 +124,8 @@ describe('DeviceController', () => {
 
     expect(response.body).toEqual(res);
     expect(deviceService.bindDevice).toHaveBeenCalledWith(req);
+    expect(validateSignedRequest).toHaveBeenCalledWith(req);
+    expect(validateRegisterRequest).not.toHaveBeenCalled();
   });
 
   it('unbinds a device', async () => {
@@ -135,5 +144,7 @@ describe('DeviceController', () => {
 
     expect(response.body).toEqual(res);
     expect(deviceService.unbindDevice).toHaveBeenCalledWith(req);
+    expect(validateSignedRequest).toHaveBeenCalledWith(req);
+    expect(validateRegisterRequest).not.toHaveBeenCalled();
   });
 });
