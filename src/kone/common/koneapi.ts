@@ -56,9 +56,11 @@ export async function fetchAccessToken(
   clientSecret: string,
   scopes?: string[],
 ): Promise<any> {
-  const endpoint = scopes?.some((s) => s.includes('building:'))
-    ? API_AUTH_TOKEN_ENDPOINT_V1
-    : API_AUTH_TOKEN_ENDPOINT_V2;
+  const endpoint = scopes?.some((s) => s.includes('group:'))
+    ? API_AUTH_TOKEN_ENDPOINT_V2
+    : scopes?.some((s) => s.includes('building:'))
+      ? API_AUTH_TOKEN_ENDPOINT_V1
+      : API_AUTH_TOKEN_ENDPOINT_V2;
 
   const requestConfig: AxiosRequestConfig = {
     method: 'POST',
@@ -254,11 +256,11 @@ export async function openWebSocketConnection(
       reject(statusCode);
     });
 
-      ws.on('open', async () => {
-        // Once the connection is open, resolve promise with the WebSocket instance
-        ws.removeAllListeners('close');
-        resolve(ws);
-      });
+    ws.on('open', async () => {
+      // Once the connection is open, resolve promise with the WebSocket instance
+      ws.removeAllListeners('close');
+      resolve(ws);
+    });
   });
 }
 
