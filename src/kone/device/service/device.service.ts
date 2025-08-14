@@ -4,7 +4,7 @@ import { RegisterDeviceResponseDTO } from '../dto/register/RegisterDeviceRespons
 import { BindDeviceRequestDTO } from '../dto/bind/BindDeviceRequestDTO';
 import { BindDeviceResponseDTO } from '../dto/bind/BindDeviceResponseDTO';
 import { RegisterDeviceResultDTO } from '../dto/register/RegisterDeviceResultDTO';
-import { randomBytes } from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 import { BindDeviceResultDTO } from '../dto/bind/BindDeviceResultDTO';
 
 @Injectable()
@@ -41,9 +41,12 @@ export class DeviceService {
       return response;
     }
     // Generate device secret (24-char hex)
-    const deviceSecret = randomBytes(12).toString('hex');
+    const rawSecret = randomBytes(12).toString('hex');
+    const deviceSecret = createHash('sha256')
+      .update(rawSecret)
+      .digest('hex');
 
-    // Store in memory
+    // Store hashed secret in memory
     this.deviceRegistry.set(request.deviceUuid, {
       deviceSecret,
       deviceMac: request.deviceMac,
@@ -59,6 +62,10 @@ export class DeviceService {
     response.errcode = 0;
     response.errmsg = 'SUCCESS';
     return response;
+  }
+
+  getDeviceSecret(deviceUuid: string): string | undefined {
+    return this.deviceRegistry.get(deviceUuid)?.deviceSecret;
   }
 
   bindDevice(request: BindDeviceRequestDTO): BindDeviceResponseDTO {

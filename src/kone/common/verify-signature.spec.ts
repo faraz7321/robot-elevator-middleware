@@ -2,11 +2,9 @@
 const originalEnv = {
   ELEVATOR_APP_NAME: process.env.ELEVATOR_APP_NAME,
   ELEVATOR_APP_SECRET: process.env.ELEVATOR_APP_SECRET,
-  BIB_DEVICE_SECRET: process.env.BIB_DEVICE_SECRET,
 };
 process.env.ELEVATOR_APP_NAME = 'testApp';
 process.env.ELEVATOR_APP_SECRET = 'appSecret';
-process.env.BIB_DEVICE_SECRET = 'deviceSecret';
 
 const {
   generateSign,
@@ -17,7 +15,7 @@ const {
 describe('verify-signature', () => {
   const appname = process.env.ELEVATOR_APP_NAME;
   const appSecret = process.env.ELEVATOR_APP_SECRET;
-  const deviceSecret = process.env.BIB_DEVICE_SECRET;
+  const deviceSecret = 'deviceSecret';
   const deviceUuid = 'device-123';
 
   it('validates register request without check', () => {
@@ -58,5 +56,4 @@ describe('verify-signature', () => {
 afterAll(() => {
   process.env.ELEVATOR_APP_NAME = originalEnv.ELEVATOR_APP_NAME;
   process.env.ELEVATOR_APP_SECRET = originalEnv.ELEVATOR_APP_SECRET;
-  process.env.BIB_DEVICE_SECRET = originalEnv.BIB_DEVICE_SECRET;
 });

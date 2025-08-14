@@ -29,7 +29,6 @@ Create a `.env` file or set environment variables before starting the applicatio
 | `KONE_CLIENT_ID` | Client identifier issued by KONE. |
 | `KONE_CLIENT_SECRET` | Client secret issued by KONE. |
 | `BIB_DEVICE_UUID` | Unique identifier for the robot device. |
-| `BIB_DEVICE_SECRET` | Secret associated with the robot device. |
 | `ELEVATOR_APP_NAME` | Registered application name. |
 | `ELEVATOR_APP_SECRET` | Secret associated with the application. |
 | `KONE_BUILDING_ID` | Identifier of the building to control. |

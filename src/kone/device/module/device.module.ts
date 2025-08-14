@@ -6,5 +6,6 @@ import { DeviceController } from '../controller/device.controller';
   imports: [],
   controllers: [DeviceController],
   providers: [DeviceService],
+  exports: [DeviceService],
 })
 export class DeviceModule {}

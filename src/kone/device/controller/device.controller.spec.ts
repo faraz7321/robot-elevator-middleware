@@ -6,20 +6,21 @@ import { DeviceService } from '../service/device.service';
 import axios from 'axios';
 import * as crypto from 'crypto';
 import * as process from 'node:process';
-import * as dotenv from 'dotenv';
 
-dotenv.config();
+// Set required environment variables for tests
+const deviceUuid = 'device-uuid';
+const appname = 'testApp';
+const deviceSecret = 'deviceSecret';
+const appSecret = 'appSecret';
+const placeId = 1;
+process.env.ELEVATOR_APP_NAME = appname;
+process.env.ELEVATOR_APP_SECRET = appSecret;
 
 function md5(input: string): string {
   return crypto.createHash('md5').update(input).digest('hex');
 }
 
 // === Input values
-const deviceUuid = process.env.BIB_DEVICE_UUID!;
-const appname = process.env.ELEVATOR_APP_NAME!;
-const deviceSecret = process.env.BIB_DEVICE_SECRET!;
-const appSecret = process.env.ELEVATOR_APP_SECRET!;
-const placeId = process.env.KONE_BUILDING_ID!;
 const deviceMac = '112233445575';
 const liftNos = [1];
 const endpoint =
@@ -64,10 +65,11 @@ const {
 describe('DeviceController', () => {
   let app: INestApplication;
 
-  const deviceService = {
+const deviceService = {
     registerDevice: jest.fn(),
     bindDevice: jest.fn(),
     unbindDevice: jest.fn(),
+    getDeviceSecret: jest.fn().mockReturnValue(deviceSecret),
   } as Record<string, any>;
 
   beforeAll(async () => {
@@ -78,6 +80,10 @@ describe('DeviceController', () => {
 
     app = module.createNestApplication();
     await app.init();
+  });
+
+  beforeEach(() => {
+    deviceService.getDeviceSecret.mockReturnValue(deviceSecret);
   });
 
   afterEach(() => {
@@ -124,7 +130,7 @@ describe('DeviceController', () => {
 
     expect(response.body).toEqual(res);
     expect(deviceService.bindDevice).toHaveBeenCalledWith(req);
-    expect(validateSignedRequest).toHaveBeenCalledWith(req);
+    expect(validateSignedRequest).toHaveBeenCalledWith(req, deviceSecret);
     expect(validateRegisterRequest).not.toHaveBeenCalled();
   });
 
@@ -144,7 +150,7 @@ describe('DeviceController', () => {
 
     expect(response.body).toEqual(res);
     expect(deviceService.unbindDevice).toHaveBeenCalledWith(req);
-    expect(validateSignedRequest).toHaveBeenCalledWith(req);
+    expect(validateSignedRequest).toHaveBeenCalledWith(req, deviceSecret);
     expect(validateRegisterRequest).not.toHaveBeenCalled();
   });
 });

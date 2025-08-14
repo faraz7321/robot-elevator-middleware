@@ -9,7 +9,6 @@ function md5(str: string): string {
 
 const ELEVATOR_APP_NAME = process.env.ELEVATOR_APP_NAME || '';
 const ELEVATOR_APP_SECRET = process.env.ELEVATOR_APP_SECRET || '';
-const BIB_DEVICE_SECRET = process.env.BIB_DEVICE_SECRET || '';
 
 export function generateCheck(
   deviceUuid: string,
@@ -82,8 +81,11 @@ export function isValidRequest(
   return calculatedSign === sign;
 }
 
-export function validateSignedRequest(request: Record<string, any>): void {
-  if (!isValidRequest(request, ELEVATOR_APP_SECRET, BIB_DEVICE_SECRET)) {
+export function validateSignedRequest(
+  request: Record<string, any>,
+  deviceSecret?: string,
+): void {
+  if (!isValidRequest(request, ELEVATOR_APP_SECRET, deviceSecret)) {
     throw new UnauthorizedException('Invalid sign or check');
   }
 }
