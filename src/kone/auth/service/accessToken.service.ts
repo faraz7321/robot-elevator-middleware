@@ -17,12 +17,12 @@ export class AccessTokenService {
     AccessTokenData
   >();
 
-  async getAccessToken(placeId: string): Promise<string> {
+  async getAccessToken(buildingId: string): Promise<string> {
     validateClientIdAndClientSecret(
       this.KONE_CLIENT_ID,
       this.KONE_CLIENT_SECRET,
     );
-    const scopes = this.getScopes(placeId);
+    const scopes = this.getScopes(buildingId);
     const existingAccessToken: AccessTokenData | undefined =
       this.scopeToTokenMap.get(scopes.join(' '));
     if (existingAccessToken && Date.now() < existingAccessToken.expiresAt) {
@@ -44,7 +44,7 @@ export class AccessTokenService {
     return accessTokenData.access_token;
   }
 
-  private getScopes(placeId: string): string[] {
-    return ['application/inventory', `callgiving/group:${placeId}:1`];
+  private getScopes(buildingId: string): string[] {
+    return ['application/inventory', `callgiving/group:${buildingId}:1`];
   }
 }
