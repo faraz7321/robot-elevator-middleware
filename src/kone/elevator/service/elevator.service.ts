@@ -15,7 +15,11 @@ import {
 } from '../../common/koneapi';
 import { plainToInstance } from 'class-transformer';
 import { AccessTokenService } from '../../auth/service/accessToken.service';
-import { BuildingTopology, WebSocketResponse } from '../../common/types';
+import {
+  BUILDING_ID_PREFIX,
+  BuildingTopology,
+  WebSocketResponse,
+} from '../../common/types';
 import { logIncoming, logOutgoing } from '../../common/logger';
 
 /**
@@ -32,21 +36,27 @@ export class ElevatorService {
 
   private buildingTopologyCache: Map<string, BuildingTopology> = new Map();
 
+  private formatBuildingId(placeId: string): string {
+    return placeId.startsWith(BUILDING_ID_PREFIX)
+      ? placeId
+      : `${BUILDING_ID_PREFIX}${placeId}`;
+  }
+
   async listElevators(
     request: ListElevatorsRequestDTO,
   ): Promise<ListElevatorsResponseDTO> {
     const response = new ListElevatorsResponseDTO();
 
-    const accessToken = await this.accessTokenService.getAccessToken(
-      request.placeId,
-    );
+    const buildingId = this.formatBuildingId(request.placeId);
+    const accessToken =
+      await this.accessTokenService.getAccessToken(buildingId);
 
-    let topology = this.buildingTopologyCache.get(request.placeId);
+    let topology = this.buildingTopologyCache.get(buildingId);
     if (!topology) {
-      logOutgoing('kone fetchBuildingTopology', { placeId: request.placeId });
-      topology = await fetchBuildingTopology(accessToken, request.placeId);
+      logOutgoing('kone fetchBuildingTopology', { buildingId });
+      topology = await fetchBuildingTopology(accessToken, buildingId);
       logIncoming('kone fetchBuildingTopology', topology);
-      this.buildingTopologyCache.set(request.placeId, topology);
+      this.buildingTopologyCache.set(buildingId, topology);
     }
 
     const areaNameMap = new Map(
@@ -163,18 +173,19 @@ export class ElevatorService {
     request: CallElevatorRequestDTO,
   ): Promise<CallElevatorResponseDTO> {
     const requestId = this.getRequestId();
-    const accessToken = await this.accessTokenService.getAccessToken(
-      request.placeId,
-    );
-
-    const targetBuildingId = request.placeId;
+    const targetBuildingId = this.formatBuildingId(request.placeId);
     let topology = this.buildingTopologyCache.get(targetBuildingId);
     if (!topology) {
+      const buildingToken =
+        await this.accessTokenService.getAccessToken(targetBuildingId);
       logOutgoing('kone fetchBuildingTopology', { placeId: targetBuildingId });
-      topology = await fetchBuildingTopology(accessToken, targetBuildingId);
+      topology = await fetchBuildingTopology(buildingToken, targetBuildingId);
       logIncoming('kone fetchBuildingTopology', topology);
       this.buildingTopologyCache.set(targetBuildingId, topology);
     }
+    const accessToken = await this.accessTokenService.getAccessToken(
+      request.placeId,
+    );
     const targetGroupId = topology.groups?.[0]?.groupId.split(':').pop() || '1';
 
     // Check lift operational mode before sending call

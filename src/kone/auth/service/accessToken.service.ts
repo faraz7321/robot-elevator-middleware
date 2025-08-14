@@ -3,6 +3,7 @@ import {
   fetchAccessToken,
   validateClientIdAndClientSecret,
 } from '../../common/koneapi';
+import { BUILDING_ID_PREFIX } from '../../common/types';
 import { AccessTokenData } from '../dto/AccessTokenData';
 
 @Injectable()
@@ -17,12 +18,12 @@ export class AccessTokenService {
     AccessTokenData
   >();
 
-  async getAccessToken(placeId: string): Promise<string> {
+  async getAccessToken(buildingId: string): Promise<string> {
     validateClientIdAndClientSecret(
       this.KONE_CLIENT_ID,
       this.KONE_CLIENT_SECRET,
     );
-    const scopes = this.getScopes(placeId);
+    const scopes = this.getScopes(buildingId);
     const existingAccessToken: AccessTokenData | undefined =
       this.scopeToTokenMap.get(scopes.join(' '));
     if (existingAccessToken && Date.now() < existingAccessToken.expiresAt) {
@@ -45,6 +46,13 @@ export class AccessTokenService {
   }
 
   private getScopes(placeId: string): string[] {
-    return ['application/inventory', `callgiving/group:${placeId}:1`];
+    const scopes = ['application/inventory'];
+    if (placeId.startsWith(BUILDING_ID_PREFIX)) {
+      const id = placeId.slice(BUILDING_ID_PREFIX.length);
+      scopes.push(`topology/building:${id}`);
+    } else {
+      scopes.push(`callgiving/group:${placeId}:1`);
+    }
+    return scopes;
   }
 }

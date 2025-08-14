@@ -16,12 +16,14 @@ import {
   ResumeSessionPayload,
   WebSocketResumeSessionResponse,
 } from './types';
-import { AccessTokenData } from '../auth/dto/AccessTokenData';
 
 /**
  * Variables that contain the main endpoints used in this demo project.
  */
 const API_HOSTNAME = process.env.API_HOSTNAME || 'dev.kone.com';
+const API_AUTH_TOKEN_ENDPOINT_V1 =
+  process.env.API_AUTH_TOKEN_ENDPOINT_V1 ||
+  `https://${API_HOSTNAME}/api/v1/oauth2/token`;
 const API_AUTH_TOKEN_ENDPOINT_V2 =
   process.env.API_AUTH_TOKEN_ENDPOINT ||
   `https://${API_HOSTNAME}/api/v2/oauth2/token`;
@@ -54,9 +56,13 @@ export async function fetchAccessToken(
   clientSecret: string,
   scopes?: string[],
 ): Promise<any> {
+  const endpoint = scopes?.some((s) => s.includes('building:'))
+    ? API_AUTH_TOKEN_ENDPOINT_V1
+    : API_AUTH_TOKEN_ENDPOINT_V2;
+
   const requestConfig: AxiosRequestConfig = {
     method: 'POST',
-    url: API_AUTH_TOKEN_ENDPOINT_V2,
+    url: endpoint,
     auth: {
       username: clientId,
       password: clientSecret,
@@ -248,7 +254,7 @@ export async function openWebSocketConnection(
       reject(statusCode);
     });
 
-    ws.on('open', async (_event: any) => {
+    ws.on('open', async () => {
       // Once the connection is open, resolve promise with the WebSocket instance
       ws.removeAllListeners('close');
       resolve(ws);
@@ -396,7 +402,9 @@ export async function connectWithSession(
         // Re-emit events through the session instance in parsed JSON format
         session.emit('session-event', messageJson);
       }
-    } catch (error) {} // Ignore non-JSON messages
+    } catch {
+      // Ignore non-JSON messages
+    }
   }
 
   // Utility function for cleaning up connection listeners when closing the connection
@@ -509,7 +517,9 @@ export async function waitForResponse(
           webSocketConnection.off('message', onMessage);
           reject(dataBlob);
         }
-      } catch (error) {}
+      } catch {
+        // Ignore non-JSON messages
+      }
     };
     // Push onMessage handler to the top of listener list to receive event as early as possible
     webSocketConnection.prependListener('message', onMessage);
