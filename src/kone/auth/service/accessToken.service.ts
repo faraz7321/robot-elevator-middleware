@@ -44,7 +44,11 @@ export class AccessTokenService {
     return accessTokenData.access_token;
   }
 
-  private getScopes(buildingId: string): string[] {
-    return ['application/inventory', `callgiving/group:${buildingId}:1`];
+  private getScopes(placeId: string): string[] {
+    return [
+      'application/inventory',
+      `callgiving/group:${placeId}:1`,
+      `topology/building:${placeId}`,
+    ];
   }
 }
