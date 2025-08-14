@@ -91,61 +91,107 @@ export class ElevatorService {
   async getLiftStatus(
     request: LiftStatusRequestDTO,
   ): Promise<LiftStatusResponseDTO> {
-    const accessToken = await this.accessTokenService.getAccessToken(
-      request.placeId,
-    );
-
+    const buildingId = this.formatBuildingId(request.placeId);
+    const accessToken = await this.accessTokenService.getAccessToken(buildingId);
     const response = new LiftStatusResponseDTO();
 
     try {
+      let topology = this.buildingTopologyCache.get(buildingId);
+      if (!topology) {
+        logOutgoing('kone fetchBuildingTopology', { buildingId });
+        topology = await fetchBuildingTopology(accessToken, buildingId);
+        logIncoming('kone fetchBuildingTopology', topology);
+        this.buildingTopologyCache.set(buildingId, topology);
+      }
+      const group = topology.groups?.[0];
+      const targetGroupId = group?.groupId.split(':').pop() || '1';
+
       const webSocketConnection = await openWebSocketConnection(accessToken);
 
-      const liftStatusPayload = {
-        type: 'lift-call-api-v2',
-        buildingId: request.placeId,
-        callType: 'status',
+      const monitorPayload = {
+        type: 'site-monitoring',
+        buildingId,
+        callType: 'monitor',
+        groupId: targetGroupId,
         payload: {
-          lift: request.liftNo,
+          sub: `status-${Date.now()}`,
+          duration: 30,
+          subtopics: [
+            `lift_status/${request.liftNo}`,
+            `lift_position/${request.liftNo}`,
+          ],
         },
       };
-      logOutgoing('kone websocket status', liftStatusPayload);
+      logOutgoing('kone websocket monitor', monitorPayload);
+      webSocketConnection.send(JSON.stringify(monitorPayload));
 
-      const mode = await new Promise<string>((resolve, reject) => {
+      const status: {
+        mode?: string;
+        floor?: number;
+        dir?: string;
+        moving_state?: string;
+        door?: boolean;
+      } = {};
+
+      await new Promise<void>((resolve) => {
         const timer = setTimeout(() => {
           webSocketConnection.close();
-          resolve('UNKNOWN');
+          resolve();
         }, 2000);
 
         webSocketConnection.on('message', (data: string) => {
           try {
-            const parsed = JSON.parse(data) as {
-              callType?: string;
-              data?: { lift_mode?: string };
-            };
-            logIncoming('kone websocket status', parsed);
-            if (parsed.callType === 'status') {
+            const msg = JSON.parse(data) as any;
+            logIncoming('kone websocket monitor', msg);
+            if (msg.callType === 'monitor-lift-status' || msg.topic?.startsWith('lift_status')) {
+              status.mode = msg.data?.lift_mode ?? msg.payload?.lift_mode;
+            }
+            if (
+              msg.callType === 'monitor-lift-position' ||
+              msg.callType === 'monitor-deck-position' ||
+              msg.topic?.startsWith('lift_position') ||
+              msg.topic?.startsWith('deck_position')
+            ) {
+              const d = msg.data || msg.payload || {};
+              status.floor = d.cur ?? status.floor;
+              status.dir = d.dir ?? status.dir;
+              status.moving_state = d.moving_state ?? status.moving_state;
+              status.door = typeof d.door === 'boolean' ? d.door : status.door;
+            }
+            if (
+              status.mode !== undefined &&
+              status.floor !== undefined &&
+              status.dir !== undefined &&
+              status.moving_state !== undefined &&
+              status.door !== undefined
+            ) {
               clearTimeout(timer);
               webSocketConnection.close();
-              resolve(parsed.data?.lift_mode ?? 'UNKNOWN');
+              resolve();
             }
-          } catch (err) {
-            clearTimeout(timer);
-            webSocketConnection.close();
-            reject(err instanceof Error ? err : new Error(String(err)));
+          } catch {
+            // ignore
           }
         });
-
-        webSocketConnection.send(JSON.stringify(liftStatusPayload));
       });
+
+      const directionMap: Record<string, number> = { UP: 1, DOWN: 2 };
+      const movingMap: Record<string, number> = {
+        MOVING: 1,
+        STARTING: 1,
+        DECELERATING: 1,
+        STOPPED: 0,
+        STANDING: 0,
+      };
 
       response.result = [
         {
           liftNo: request.liftNo,
-          floor: 0,
-          state: 0,
-          prevDirection: 0,
-          liftDoorStatus: 0,
-          mode,
+          floor: status.floor ?? 0,
+          state: movingMap[status.moving_state || ''] ?? 0,
+          prevDirection: directionMap[status.dir || ''] ?? 0,
+          liftDoorStatus: status.door ? 1 : 0,
+          mode: status.mode ?? 'UNKNOWN',
         },
       ];
       response.errcode = 0;
