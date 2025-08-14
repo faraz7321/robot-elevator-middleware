@@ -50,7 +50,7 @@ export class ElevatorService {
     const buildingId = this.formatBuildingId(request.placeId);
     const accessToken =
       await this.accessTokenService.getAccessToken(buildingId);
-
+    //console.log(accessToken);
     let topology = this.buildingTopologyCache.get(buildingId);
     if (!topology) {
       logOutgoing('kone fetchBuildingTopology', { buildingId });

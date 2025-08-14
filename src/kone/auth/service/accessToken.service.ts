@@ -51,9 +51,11 @@ export class AccessTokenService {
       ? buildingId.slice(BUILDING_ID_PREFIX.length)
       : buildingId;
     const groupId = 1;
-    scopes.push(`robotcall/group:${id}:${groupId}`);
-    scopes.push(`callgiving/group:${id}:${groupId}`);
-    scopes.push(`topology/group:${id}:${groupId}`);
+    //scopes.push(`topology/building:${id}:1`);
+    scopes.push(`robotcall/*`);
+    scopes.push('callgiving/*');
+    scopes.push('application/inventory');
+    scopes.push('equipmentstatus/*');
     return scopes;
   }
 }
