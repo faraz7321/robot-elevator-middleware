@@ -53,7 +53,7 @@ function generateSign(
 
 jest.mock('../../common/verify-signature', () => ({
   validateSignedRequest: jest.fn(),
-  isValidRegisterRequest: jest.fn().mockReturnValue(true),
+  validateRegisterRequest: jest.fn(),
 }));
 
 describe('DeviceController', () => {

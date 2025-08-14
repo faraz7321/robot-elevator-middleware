@@ -1,10 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Post,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Body, Controller, Post } from '@nestjs/common';
 import { DeviceService } from '../service/device.service';
 import { RegisterDeviceRequestDTO } from '../dto/register/RegisterDeviceRequestDTO';
 import { RegisterDeviceResponseDTO } from '../dto/register/RegisterDeviceResponseDTO';
@@ -12,7 +6,7 @@ import { BindDeviceRequestDTO } from '../dto/bind/BindDeviceRequestDTO';
 import { BindDeviceResponseDTO } from '../dto/bind/BindDeviceResponseDTO';
 import {
   validateSignedRequest,
-  isValidRegisterRequest,
+  validateRegisterRequest,
 } from '../../common/verify-signature';
 
 @Controller('device')
@@ -23,9 +17,7 @@ export class DeviceController {
   registerDevice(
     @Body() request: RegisterDeviceRequestDTO,
   ): RegisterDeviceResponseDTO {
-    if (!isValidRegisterRequest(request)) {
-      throw new UnauthorizedException('Invalid sign or check');
-    }
+    validateRegisterRequest(request);
     return this.deviceService.registerDevice(request);
   }
 
