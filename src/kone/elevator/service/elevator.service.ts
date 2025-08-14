@@ -173,18 +173,19 @@ export class ElevatorService {
     request: CallElevatorRequestDTO,
   ): Promise<CallElevatorResponseDTO> {
     const requestId = this.getRequestId();
-    const accessToken = await this.accessTokenService.getAccessToken(
-      request.placeId,
-    );
-
-    const targetBuildingId = request.placeId;
+    const targetBuildingId = this.formatBuildingId(request.placeId);
     let topology = this.buildingTopologyCache.get(targetBuildingId);
     if (!topology) {
+      const buildingToken =
+        await this.accessTokenService.getAccessToken(targetBuildingId);
       logOutgoing('kone fetchBuildingTopology', { placeId: targetBuildingId });
-      topology = await fetchBuildingTopology(accessToken, targetBuildingId);
+      topology = await fetchBuildingTopology(buildingToken, targetBuildingId);
       logIncoming('kone fetchBuildingTopology', topology);
       this.buildingTopologyCache.set(targetBuildingId, topology);
     }
+    const accessToken = await this.accessTokenService.getAccessToken(
+      request.placeId,
+    );
     const targetGroupId = topology.groups?.[0]?.groupId.split(':').pop() || '1';
 
     // Check lift operational mode before sending call

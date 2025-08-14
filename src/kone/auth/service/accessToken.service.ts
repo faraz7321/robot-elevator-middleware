@@ -3,6 +3,7 @@ import {
   fetchAccessToken,
   validateClientIdAndClientSecret,
 } from '../../common/koneapi';
+import { BUILDING_ID_PREFIX } from '../../common/types';
 import { AccessTokenData } from '../dto/AccessTokenData';
 
 @Injectable()
@@ -45,10 +46,13 @@ export class AccessTokenService {
   }
 
   private getScopes(placeId: string): string[] {
-    return [
-      'application/inventory',
-      `callgiving/group:${placeId}:1`,
-      `topology/building:${placeId}`,
-    ];
+    const scopes = ['application/inventory'];
+    if (placeId.startsWith(BUILDING_ID_PREFIX)) {
+      const id = placeId.slice(BUILDING_ID_PREFIX.length);
+      scopes.push(`topology/building:${id}`);
+    } else {
+      scopes.push(`callgiving/group:${placeId}:1`);
+    }
+    return scopes;
   }
 }

@@ -56,11 +56,9 @@ export async function fetchAccessToken(
   clientSecret: string,
   scopes?: string[],
 ): Promise<any> {
-  const endpoint = scopes?.some((s) => s.includes('group:'))
-    ? API_AUTH_TOKEN_ENDPOINT_V2
-    : scopes?.some((s) => s.includes('building:'))
-      ? API_AUTH_TOKEN_ENDPOINT_V1
-      : API_AUTH_TOKEN_ENDPOINT_V2;
+  const endpoint = scopes?.some((s) => s.includes('building:'))
+    ? API_AUTH_TOKEN_ENDPOINT_V1
+    : API_AUTH_TOKEN_ENDPOINT_V2;
 
   const requestConfig: AxiosRequestConfig = {
     method: 'POST',
