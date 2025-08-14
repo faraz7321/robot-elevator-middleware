@@ -87,7 +87,7 @@ describe('ElevatorService callElevator', () => {
       .send.mock.calls[0][0];
     const sent = JSON.parse(sendArg);
     expect(sent.payload.area).toBe(1000);
-    expect(sent.payload.call.destination).toBe(3000);
+    expect(sent.payload.call.destination).toBe(5000);
   });
 
   it('rejects call when in non-operational mode', async () => {

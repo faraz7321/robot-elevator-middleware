@@ -56,6 +56,8 @@ jest.mock('../../common/verify-signature', () => ({
   validateSignedRequest: jest.fn(),
 }));
 
+const { validateSignedRequest } = require('../../common/verify-signature');
+
 describe('ElevatorController', () => {
   let app: INestApplication;
 
@@ -101,6 +103,7 @@ describe('ElevatorController', () => {
 
     expect(response.body).toEqual(res);
     expect(elevatorService.listElevators).toHaveBeenCalledWith(req);
+    expect(validateSignedRequest).toHaveBeenCalledWith(req);
   });
 
   it('gets lift status', async () => {
@@ -119,6 +122,7 @@ describe('ElevatorController', () => {
 
     expect(response.body).toEqual(res);
     expect(elevatorService.getLiftStatus).toHaveBeenCalledWith(req);
+    expect(validateSignedRequest).toHaveBeenCalledWith(req);
   });
 
   it('calls an elevator', async () => {
@@ -145,6 +149,7 @@ describe('ElevatorController', () => {
 
     expect(response.body).toEqual(res);
     expect(elevatorService.callElevator).toHaveBeenCalledWith(req);
+    expect(validateSignedRequest).toHaveBeenCalledWith(req);
   });
 
   it('delays elevator doors', async () => {
@@ -170,6 +175,7 @@ describe('ElevatorController', () => {
 
     expect(response.body).toEqual(res);
     expect(elevatorService.delayElevatorDoors).toHaveBeenCalledWith(req);
+    expect(validateSignedRequest).toHaveBeenCalledWith(req);
   });
 
   it('reserves or cancels elevator', async () => {
@@ -195,5 +201,6 @@ describe('ElevatorController', () => {
 
     expect(response.body).toEqual(res);
     expect(elevatorService.reserveOrCancelCall).toHaveBeenCalledWith(req);
+    expect(validateSignedRequest).toHaveBeenCalledWith(req);
   });
 });
