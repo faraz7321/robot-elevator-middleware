@@ -3,9 +3,17 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { DeviceController } from './device.controller';
 import { DeviceService } from '../service/device.service';
-import axios from 'axios';
 import * as crypto from 'crypto';
 import * as process from 'node:process';
+import {
+  validateSignedRequest,
+  validateRegisterRequest,
+} from '../../common/verify-signature';
+
+jest.mock('../../common/verify-signature', () => ({
+  validateSignedRequest: jest.fn(),
+  validateRegisterRequest: jest.fn(),
+}));
 
 // Set required environment variables for tests
 const deviceUuid = 'device-uuid';
@@ -23,8 +31,6 @@ function md5(input: string): string {
 // === Input values
 const deviceMac = '112233445575';
 const liftNos = [1];
-const endpoint =
-  process.env.ROBOT_API_BASE || 'http://localhost:3000/openapi/v5/lift/open';
 
 function generateCheck(
   deviceUuid: string,
@@ -52,20 +58,10 @@ function generateSign(
   return md5(kvs.join('|'));
 }
 
-jest.mock('../../common/verify-signature', () => ({
-  validateSignedRequest: jest.fn(),
-  validateRegisterRequest: jest.fn(),
-}));
-
-const {
-  validateSignedRequest,
-  validateRegisterRequest,
-} = require('../../common/verify-signature');
-
 describe('DeviceController', () => {
   let app: INestApplication;
 
-const deviceService = {
+  const deviceService = {
     registerDevice: jest.fn(),
     bindDevice: jest.fn(),
     unbindDevice: jest.fn(),
