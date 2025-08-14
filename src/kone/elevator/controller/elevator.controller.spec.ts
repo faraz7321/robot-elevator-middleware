@@ -3,23 +3,25 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { ElevatorController } from './elevator.controller';
 import { ElevatorService } from '../service/elevator.service';
+import { DeviceService } from '../../device/service/device.service';
 import axios from 'axios';
 import * as crypto from 'crypto';
 import * as process from 'node:process';
-import * as dotenv from 'dotenv';
 
-dotenv.config();
+// Set required environment variables for tests
+const deviceUuid = 'device-uuid';
+const appname = 'testApp';
+const deviceSecret = 'deviceSecret';
+const appSecret = 'appSecret';
+const placeId = 1;
+process.env.ELEVATOR_APP_NAME = appname;
+process.env.ELEVATOR_APP_SECRET = appSecret;
 
 function md5(input: string): string {
   return crypto.createHash('md5').update(input).digest('hex');
 }
 
 // === Input values
-const deviceUuid = process.env.BIB_DEVICE_UUID!;
-const appname = process.env.ELEVATOR_APP_NAME!;
-const deviceSecret = process.env.BIB_DEVICE_SECRET!;
-const appSecret = process.env.ELEVATOR_APP_SECRET!;
-const placeId = process.env.KONE_BUILDING_ID!;
 const deviceMac = '112233445575';
 const liftNos = [1];
 const liftNo = 1;
@@ -68,15 +70,25 @@ describe('ElevatorController', () => {
     delayElevatorDoors: jest.fn(),
     reserveOrCancelCall: jest.fn(),
   } as Record<string, any>;
+  const deviceService = {
+    getDeviceSecret: jest.fn().mockReturnValue(deviceSecret),
+  } as Record<string, any>;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ElevatorController],
-      providers: [{ provide: ElevatorService, useValue: elevatorService }],
+      providers: [
+        { provide: ElevatorService, useValue: elevatorService },
+        { provide: DeviceService, useValue: deviceService },
+      ],
     }).compile();
 
     app = module.createNestApplication();
     await app.init();
+  });
+
+  beforeEach(() => {
+    deviceService.getDeviceSecret.mockReturnValue(deviceSecret);
   });
 
   afterEach(() => {
@@ -103,7 +115,7 @@ describe('ElevatorController', () => {
 
     expect(response.body).toEqual(res);
     expect(elevatorService.listElevators).toHaveBeenCalledWith(req);
-    expect(validateSignedRequest).toHaveBeenCalledWith(req);
+    expect(validateSignedRequest).toHaveBeenCalledWith(req, deviceSecret);
   });
 
   it('gets lift status', async () => {
@@ -122,7 +134,7 @@ describe('ElevatorController', () => {
 
     expect(response.body).toEqual(res);
     expect(elevatorService.getLiftStatus).toHaveBeenCalledWith(req);
-    expect(validateSignedRequest).toHaveBeenCalledWith(req);
+    expect(validateSignedRequest).toHaveBeenCalledWith(req, deviceSecret);
   });
 
   it('calls an elevator', async () => {
@@ -149,7 +161,7 @@ describe('ElevatorController', () => {
 
     expect(response.body).toEqual(res);
     expect(elevatorService.callElevator).toHaveBeenCalledWith(req);
-    expect(validateSignedRequest).toHaveBeenCalledWith(req);
+    expect(validateSignedRequest).toHaveBeenCalledWith(req, deviceSecret);
   });
 
   it('delays elevator doors', async () => {
@@ -175,7 +187,7 @@ describe('ElevatorController', () => {
 
     expect(response.body).toEqual(res);
     expect(elevatorService.delayElevatorDoors).toHaveBeenCalledWith(req);
-    expect(validateSignedRequest).toHaveBeenCalledWith(req);
+    expect(validateSignedRequest).toHaveBeenCalledWith(req, deviceSecret);
   });
 
   it('reserves or cancels elevator', async () => {
@@ -201,6 +213,6 @@ describe('ElevatorController', () => {
 
     expect(response.body).toEqual(res);
     expect(elevatorService.reserveOrCancelCall).toHaveBeenCalledWith(req);
-    expect(validateSignedRequest).toHaveBeenCalledWith(req);
+    expect(validateSignedRequest).toHaveBeenCalledWith(req, deviceSecret);
   });
 });
