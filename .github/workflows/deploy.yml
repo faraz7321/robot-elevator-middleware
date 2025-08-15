@@ -6,10 +6,10 @@ on:
 
 env:
   PROJECT_ID: sebotics
-  REGION: europe-central2
+  REGION: europe-west1
   REPO_NAME: elevator-controller
   SERVICE_NAME: robot-elevator-middleware
-  IMAGE: europe-central2-docker.pkg.dev/sebotics/elevator-controller/robot-elevator-middleware
+  IMAGE: europe-west1-docker.pkg.dev/sebotics/elevator-controller/robot-elevator-middleware
 
 jobs:
   test-build-deploy:
