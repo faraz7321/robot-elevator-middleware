@@ -1,0 +1,58 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [ main ]
+
+env:
+  PROJECT_ID: sebotics
+  REGION: europe-central2
+  REPO_NAME: elevator-controller
+  SERVICE_NAME: robot-elevator-middleware
+  IMAGE: europe-central2-docker.pkg.dev/sebotics/elevator-controller/robot-elevator-middleware
+
+jobs:
+  test-build-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - run: gcloud services enable run.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com
+
+      - run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - run: docker build -t $IMAGE .
+
+      - run: docker push $IMAGE
+
+      - run: |
+          gcloud run deploy $SERVICE_NAME \
+            --image $IMAGE \
+            --platform managed \
+            --region $REGION \
+            --port 3000 \
+            --allow-unauthenticated \
+            --set-secrets ELEVATOR_APP_SECRET=ELEVATOR_APP_SECRET:latest \
+            --set-secrets KONE_CLIENT_ID=KONE_CLIENT_ID:latest \
+            --set-secrets KONE_CLIENT_SECRET=KONE_CLIENT_SECRET:latest
