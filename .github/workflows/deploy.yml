@@ -65,8 +65,8 @@ jobs:
         run: |
           gcloud run services update "$SERVICE_NAME" \
             --region "$REGION" \
-            --clear-env-vars ELEVATOR_APP_SECRET,KONE_CLIENT_ID,KONE_CLIENT_SECRET \
-            --clear-secrets ELEVATOR_APP_SECRET,KONE_CLIENT_ID,KONE_CLIENT_SECRET || true
+            --clear-env-vars=ELEVATOR_APP_SECRET,KONE_CLIENT_ID,KONE_CLIENT_SECRET \
+            --clear-secrets=ELEVATOR_APP_SECRET,KONE_CLIENT_ID,KONE_CLIENT_SECRET || true
 
       - name: Deploy to Cloud Run (commit SHA)
         run: |
