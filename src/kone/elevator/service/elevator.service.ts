@@ -9,7 +9,7 @@ import { ListElevatorsRequestDTO } from '../dtos/list/ListElevatorsRequestDTO';
 import { ListElevatorsResponseDTO } from '../dtos/list/ListElevatorsResponseDTO';
 import { CallElevatorResponseDTO } from '../dtos/call/CallElevatorResponseDTO';
 import {
-  fetchBuildingConfig,
+  fetchBuildingTopology,
   openWebSocketConnection,
   waitForResponse,
 } from '../../common/koneapi';
@@ -48,7 +48,7 @@ export class ElevatorService {
     let topology = this.buildingTopologyCache.get(buildingId);
     if (!topology) {
       const token = await this.accessTokenService.getAccessToken(buildingId);
-      topology = await fetchBuildingConfig(token, buildingId);
+      topology = await fetchBuildingTopology(token, buildingId);
       this.buildingTopologyCache.set(buildingId, topology);
     }
     return topology;
@@ -102,7 +102,7 @@ export class ElevatorService {
       let topology = this.buildingTopologyCache.get(buildingId);
       if (!topology) {
         logOutgoing('kone fetchBuildingConfig', { buildingId });
-        topology = await fetchBuildingConfig(accessToken, buildingId);
+        topology = await fetchBuildingTopology(accessToken, buildingId);
         logIncoming('kone fetchBuildingConfig', topology);
         this.buildingTopologyCache.set(buildingId, topology);
       }
@@ -231,7 +231,7 @@ export class ElevatorService {
       const buildingToken =
         await this.accessTokenService.getAccessToken(targetBuildingId);
       logOutgoing('kone fetchBuildingConfig', { placeId: targetBuildingId });
-      topology = await fetchBuildingConfig(buildingToken, targetBuildingId);
+      topology = await fetchBuildingTopology(buildingToken, targetBuildingId);
       logIncoming('kone fetchBuildingConfig', topology);
       this.buildingTopologyCache.set(targetBuildingId, topology);
     }
@@ -358,7 +358,7 @@ export class ElevatorService {
       let topology = this.buildingTopologyCache.get(request.placeId);
       if (!topology) {
         logOutgoing('kone fetchBuildingConfig', { placeId: request.placeId });
-        topology = await fetchBuildingConfig(accessToken, request.placeId);
+        topology = await fetchBuildingTopology(accessToken, request.placeId);
         logIncoming('kone fetchBuildingConfig', topology);
         this.buildingTopologyCache.set(request.placeId, topology);
       }
@@ -420,7 +420,7 @@ export class ElevatorService {
       let topology = this.buildingTopologyCache.get(request.placeId);
       if (!topology) {
         logOutgoing('kone fetchBuildingConfig', { placeId: request.placeId });
-        topology = await fetchBuildingConfig(accessToken, request.placeId);
+        topology = await fetchBuildingTopology(accessToken, request.placeId);
         logIncoming('kone fetchBuildingConfig', topology);
         this.buildingTopologyCache.set(request.placeId, topology);
       }
