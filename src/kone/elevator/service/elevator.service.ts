@@ -61,27 +61,32 @@ export class ElevatorService {
 
     const buildingId = this.formatBuildingId(request.placeId);
     const topology = await this.getBuildingTopology(buildingId);
-    const areaNameMap = new Map(
-      topology.areas.map((area) => [area.areaId, area.shortName]),
+    const destinationNameMap = new Map<number, string>(
+      (topology as any).destinations?.map((dest: any) => [
+        dest.group_floor_id,
+        dest.short_name,
+      ]) || [],
     );
 
-    response.result = topology.groups.flatMap((group) =>
-      group.lifts.map((lift) => {
-        const floorNames = new Set<string>();
-        lift.floors.forEach((floor) => {
-          floor.areasServed.forEach((areaId) => {
-            const name = areaNameMap.get(areaId);
+    response.result =
+      (topology as any).groups?.flatMap((group: any) =>
+        (group.lifts || []).map((lift: any) => {
+          const floorNames = new Set<string>();
+          (lift.floors || []).forEach((floor: any) => {
+            const name = destinationNameMap.get(floor.group_floor_id);
             if (name) floorNames.add(name);
           });
-        });
-        const liftNo = Number(lift.liftId.split(':').pop());
-        return {
-          liftNo,
-          accessibleFloors: Array.from(floorNames).join(','),
-          bindingStatus: '11',
-        };
-      }),
-    );
+          const liftNo =
+            typeof lift.lift_id !== 'undefined'
+              ? Number(lift.lift_id)
+              : Number(String(lift.liftId).split(':').pop());
+          return {
+            liftNo,
+            accessibleFloors: Array.from(floorNames).join(','),
+            bindingStatus: '11',
+          };
+        }),
+      ) || [];
 
     response.errcode = 0;
     response.errmsg = 'SUCCESS';
@@ -144,7 +149,7 @@ export class ElevatorService {
 
         webSocketConnection.on('message', (data: string) => {
           try {
-            const msg = JSON.parse(data) as any;
+            const msg = JSON.parse(data);
             logIncoming('kone websocket monitor', msg);
             if (
               msg.callType === 'monitor-lift-status' ||
