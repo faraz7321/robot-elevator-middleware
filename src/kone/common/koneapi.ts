@@ -509,11 +509,13 @@ export const validateClientIdAndClientSecret = (
  * @param webSocketConnection
  * @param requestId
  * @param timeoutSeconds
+ * @param resolveAny Whether to resolve on any matching message (e.g. service acks)
  */
 export async function waitForResponse(
   webSocketConnection: WebSocket,
   requestId: string,
   timeoutSeconds = 10,
+  resolveAny = false,
 ): Promise<WebSocketResponse> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -524,20 +526,27 @@ export async function waitForResponse(
     const onMessage = function (data: string) {
       try {
         const dataBlob = JSON.parse(data);
-        if (
-          dataBlob.requestId === requestId &&
-          (dataBlob.type === 'ok' || dataBlob.callType === 'config')
-        ) {
+        if (dataBlob.requestId === requestId) {
+          if (
+            !resolveAny &&
+            dataBlob.type !== 'ok' &&
+            dataBlob.callType !== 'config'
+          ) {
+            if (dataBlob.type === 'error') {
+              clearTimeout(timer);
+              webSocketConnection.off('message', onMessage);
+              reject(dataBlob);
+            }
+            return;
+          }
+
           clearTimeout(timer);
           webSocketConnection.off('message', onMessage);
-          resolve(dataBlob);
-        } else if (
-          dataBlob.type === 'error' &&
-          dataBlob.requestId === requestId
-        ) {
-          clearTimeout(timer);
-          webSocketConnection.off('message', onMessage);
-          reject(dataBlob);
+          if (dataBlob.type === 'error') {
+            reject(dataBlob);
+          } else {
+            resolve(dataBlob);
+          }
         }
       } catch {
         // Ignore non-JSON messages

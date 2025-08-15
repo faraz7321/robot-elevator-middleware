@@ -21,6 +21,7 @@ import {
   WebSocketResponse,
 } from '../../common/types';
 import { logIncoming, logOutgoing } from '../../common/logger';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Update these two variables with your own credentials or set them up as environment variables.
@@ -118,10 +119,11 @@ export class ElevatorService {
       const targetGroupId = group?.groupId?.split(':').pop() || '1';
 
       const webSocketConnection = await openWebSocketConnection(accessToken);
-
+      const requestId = uuidv4();
       const monitorPayload = {
         type: 'site-monitoring',
         buildingId,
+        requestId,
         callType: 'monitor',
         groupId: targetGroupId,
         payload: {
@@ -135,7 +137,14 @@ export class ElevatorService {
       };
       logOutgoing('kone websocket monitor', monitorPayload);
       webSocketConnection.send(JSON.stringify(monitorPayload));
-
+      const ack = await waitForResponse(
+        webSocketConnection,
+        requestId,
+        10,
+        true,
+      );
+      logIncoming('kone websocket acknowledgement', ack);
+      logIncoming('kone websocket acknowledgement', ack);
       const status: {
         mode?: string;
         floor?: number;
