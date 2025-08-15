@@ -106,3 +106,46 @@ describe('ElevatorService callElevator', () => {
     expect(res.errmsg).toContain('FRD');
   });
 });
+describe('ElevatorService listElevators', () => {
+  let service: ElevatorService;
+  const accessTokenService = {
+    getAccessToken: jest.fn().mockResolvedValue('token'),
+  } as unknown as AccessTokenService;
+
+  beforeEach(() => {
+    service = new ElevatorService(accessTokenService);
+    (fetchBuildingTopology as jest.Mock).mockReset();
+  });
+
+  it('normalizes floor names to numbers', async () => {
+    (fetchBuildingTopology as jest.Mock).mockResolvedValueOnce({
+      groups: [
+        {
+          lifts: [
+            {
+              lift_id: 7,
+              floors: [
+                { group_floor_id: 1 },
+                { group_floor_id: 8 },
+              ],
+            },
+          ],
+        },
+      ],
+      destinations: [
+        { group_floor_id: 1, short_name: '1R' },
+        { group_floor_id: 8, short_name: '8R' },
+      ],
+    });
+
+    const req = { placeId: 'b1' } as any;
+
+    const res = await service.listElevators(req);
+
+    expect(res.result[0]).toEqual({
+      liftNo: 7,
+      accessibleFloors: '1,8',
+      bindingStatus: '11',
+    });
+  });
+});

@@ -9,7 +9,7 @@ env:
   REGION: europe-west1
   REPO_NAME: elevator-controller
   SERVICE_NAME: robot-elevator-middleware
-  IMAGE: europe-west1-docker.pkg.dev/sebotics/elevator-controller/robot-elevator-middleware
+  IMAGE: IMAGE="europe-west1-docker.pkg.dev/sebotics/cloud-run-source-deploy/robot-elevator-middleware:latest"
 
 jobs:
   test-build-deploy:

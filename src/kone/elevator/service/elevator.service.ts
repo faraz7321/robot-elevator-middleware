@@ -74,7 +74,10 @@ export class ElevatorService {
           const floorNames = new Set<string>();
           (lift.floors || []).forEach((floor: any) => {
             const name = destinationNameMap.get(floor.group_floor_id);
-            if (name) floorNames.add(name);
+            if (name) {
+              const numeric = name.replace(/\D/g, '');
+              if (numeric) floorNames.add(numeric);
+            }
           });
           const liftNo =
             typeof lift.lift_id !== 'undefined'
@@ -262,7 +265,7 @@ export class ElevatorService {
     // Map human-readable floor numbers to KONE area identifiers
     const areaMap = new Map<number, number>();
     topology.areas?.forEach((area) => {
-      const floorNum = Number(area.shortName);
+      const floorNum = parseInt(String(area.shortName).replace(/\D/g, ''), 10);
       const areaIdNum = Number(area.areaId.split(':').pop());
       if (!isNaN(floorNum) && !isNaN(areaIdNum)) {
         areaMap.set(floorNum, areaIdNum);
