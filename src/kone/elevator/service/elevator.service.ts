@@ -112,7 +112,7 @@ export class ElevatorService {
         this.buildingTopologyCache.set(buildingId, topology);
       }
       const group = topology.groups?.[0];
-      const targetGroupId = group?.groupId.split(':').pop() || '1';
+      const targetGroupId = group?.groupId?.split(':').pop() || '1';
 
       const webSocketConnection = await openWebSocketConnection(accessToken);
 
@@ -243,7 +243,8 @@ export class ElevatorService {
     const accessToken = await this.accessTokenService.getAccessToken(
       request.placeId,
     );
-    const targetGroupId = topology.groups?.[0]?.groupId.split(':').pop() || '1';
+    const targetGroupId =
+      topology.groups?.[0]?.groupId?.split(':').pop() || '1';
 
     // Check lift operational mode before sending call
     const liftStatus = await this.getLiftStatus(
@@ -368,7 +369,7 @@ export class ElevatorService {
         this.buildingTopologyCache.set(request.placeId, topology);
       }
       const group = topology.groups?.[0];
-      const targetGroupId = group?.groupId.split(':').pop() || '1';
+      const targetGroupId = group?.groupId?.split(':').pop() || '1';
       const lift = group?.lifts.find(
         (l) => Number(l.liftId.split(':').pop()) === request.liftNo,
       );
@@ -430,7 +431,7 @@ export class ElevatorService {
         this.buildingTopologyCache.set(request.placeId, topology);
       }
       const group = topology.groups?.[0];
-      const targetGroupId = group?.groupId.split(':').pop() || '1';
+      const targetGroupId = group?.groupId?.split(':').pop() || '1';
       const lift = group?.lifts.find(
         (l) => Number(l.liftId.split(':').pop()) === request.liftNo,
       );
