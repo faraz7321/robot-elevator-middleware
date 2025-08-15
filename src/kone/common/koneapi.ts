@@ -189,22 +189,8 @@ export async function fetchBuildingTopology(
   groupId = '1',
 ): Promise<BuildingTopology> {
   const connection = await openWebSocketConnection(accessToken);
-  const requestId = uuidv4();
-  const payload = {
-    type: 'common-api',
-    requestId,
-    buildingId,
-    callType: 'config',
-    groupId,
-  };
-
   try {
-    logOutgoing('kone fetchBuildingConfig', payload);
-    connection.send(JSON.stringify(payload));
-    const response = await waitForResponse(connection, requestId);
-    const buildingTopology = response.data as BuildingTopology;
-    logIncoming('kone fetchBuildingConfig', buildingTopology);
-    return buildingTopology;
+    return await fetchBuildingConfig(connection, buildingId, groupId);
   } finally {
     connection.close();
   }
@@ -540,8 +526,7 @@ export async function waitForResponse(
         const dataBlob = JSON.parse(data);
         if (
           dataBlob.requestId === requestId &&
-          (dataBlob.type === 'ok' ||
-            ('config' && dataBlob.callType === 'config'))
+          (dataBlob.type === 'ok' || dataBlob.callType === 'config')
         ) {
           clearTimeout(timer);
           webSocketConnection.off('message', onMessage);
