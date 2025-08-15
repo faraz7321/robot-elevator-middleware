@@ -183,7 +183,7 @@ export const fetchResources = async (
  * @param buildingId  Building identifier
  * @param groupId     Target group identifier (defaults to '1')
  */
-export async function fetchBuildingConfig(
+export async function fetchBuildingTopology(
   accessToken: AccessToken,
   buildingId: string,
   groupId = '1',
@@ -208,6 +208,41 @@ export async function fetchBuildingConfig(
   } finally {
     connection.close();
   }
+}
+
+/**
+ * Fetch building configuration via WebSocket common-api config call.
+ *
+ * @param connection Open WebSocket connection
+ * @param buildingId Target building identifier
+ * @param groupId Target group identifier within the building
+ */
+export async function fetchBuildingConfig(
+  connection: WebSocket,
+  buildingId: string,
+  groupId: string,
+): Promise<BuildingTopology> {
+  const requestId = uuidv4();
+  const payload = {
+    type: 'common-api',
+    requestId,
+    buildingId,
+    callType: 'config',
+    groupId,
+  };
+
+  logOutgoing('kone fetchBuildingConfig', { buildingId, groupId });
+  connection.send(JSON.stringify(payload));
+  const response = await waitForResponse(connection, requestId, 10);
+  logIncoming('kone fetchBuildingConfig', response);
+
+  const topology =
+    (response as any).data?.topology ||
+    (response as any).payload?.topology ||
+    (response as any).data ||
+    (response as any).payload;
+
+  return topology as BuildingTopology;
 }
 
 /**
@@ -503,7 +538,11 @@ export async function waitForResponse(
     const onMessage = function (data: string) {
       try {
         const dataBlob = JSON.parse(data);
-        if (dataBlob.type === 'ok' && dataBlob.requestId === requestId) {
+        if (
+          dataBlob.requestId === requestId &&
+          (dataBlob.type === 'ok' ||
+            ('config' && dataBlob.callType === 'config'))
+        ) {
           clearTimeout(timer);
           webSocketConnection.off('message', onMessage);
           resolve(dataBlob);

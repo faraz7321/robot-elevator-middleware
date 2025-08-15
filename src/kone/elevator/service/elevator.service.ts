@@ -42,23 +42,25 @@ export class ElevatorService {
       : `${BUILDING_ID_PREFIX}${placeId}`;
   }
 
+  private async getBuildingTopology(
+    buildingId: string,
+  ): Promise<BuildingTopology> {
+    let topology = this.buildingTopologyCache.get(buildingId);
+    if (!topology) {
+      const token = await this.accessTokenService.getAccessToken(buildingId);
+      topology = await fetchBuildingConfig(token, buildingId);
+      this.buildingTopologyCache.set(buildingId, topology);
+    }
+    return topology;
+  }
+
   async listElevators(
     request: ListElevatorsRequestDTO,
   ): Promise<ListElevatorsResponseDTO> {
     const response = new ListElevatorsResponseDTO();
 
     const buildingId = this.formatBuildingId(request.placeId);
-    const accessToken =
-      await this.accessTokenService.getAccessToken(buildingId);
-    //console.log(accessToken);
-    let topology = this.buildingTopologyCache.get(buildingId);
-    if (!topology) {
-      logOutgoing('kone fetchBuildingConfig', { buildingId });
-      topology = await fetchBuildingConfig(accessToken, buildingId);
-      logIncoming('kone fetchBuildingConfig', topology);
-      this.buildingTopologyCache.set(buildingId, topology);
-    }
-
+    const topology = await this.getBuildingTopology(buildingId);
     const areaNameMap = new Map(
       topology.areas.map((area) => [area.areaId, area.shortName]),
     );
@@ -92,7 +94,8 @@ export class ElevatorService {
     request: LiftStatusRequestDTO,
   ): Promise<LiftStatusResponseDTO> {
     const buildingId = this.formatBuildingId(request.placeId);
-    const accessToken = await this.accessTokenService.getAccessToken(buildingId);
+    const accessToken =
+      await this.accessTokenService.getAccessToken(buildingId);
     const response = new LiftStatusResponseDTO();
 
     try {
@@ -143,7 +146,10 @@ export class ElevatorService {
           try {
             const msg = JSON.parse(data) as any;
             logIncoming('kone websocket monitor', msg);
-            if (msg.callType === 'monitor-lift-status' || msg.topic?.startsWith('lift_status')) {
+            if (
+              msg.callType === 'monitor-lift-status' ||
+              msg.topic?.startsWith('lift_status')
+            ) {
               status.mode = msg.data?.lift_mode ?? msg.payload?.lift_mode;
             }
             if (
