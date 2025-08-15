@@ -60,14 +60,6 @@ jobs:
           docker push "${IMAGE_SHA}"
           docker push "${IMAGE_LATEST}"
 
-      # Ensure secrets/env type is normalized before deploy (idempotent)
-      - name: Clear existing env vars/secrets on Cloud Run service
-        run: |
-          gcloud run services update "$SERVICE_NAME" \
-            --region "$REGION" \
-            --clear-env-vars=ELEVATOR_APP_SECRET,KONE_CLIENT_ID,KONE_CLIENT_SECRET \
-            --clear-secrets=ELEVATOR_APP_SECRET,KONE_CLIENT_ID,KONE_CLIENT_SECRET || true
-
       - name: Deploy to Cloud Run (commit SHA)
         run: |
           gcloud run deploy "$SERVICE_NAME" \
