@@ -33,9 +33,6 @@ const API_AUTH_LIMITED_TOKEN_ENDPOINT =
 const API_RESOURCES_ENDPOINT =
   process.env.API_RESOURCES_ENDPOINT ||
   `https://${API_HOSTNAME}/api/v1/application/self/resources`;
-const API_TOPOLOGY_ENDPOINT =
-  process.env.API_TOPOLOGY_ENDPOINT ||
-  `https://${API_HOSTNAME}/api/v1/buildings`;
 const WEBSOCKET_ENDPOINT =
   process.env.WEBSOCKET_ENDPOINT || `wss://${API_HOSTNAME}/stream-v2`;
 
@@ -180,37 +177,36 @@ export const fetchResources = async (
 };
 
 /**
- * Function is used to fetch the topology of the given building.
- * It is good practice to fetch the topology once and then cache it for further use.
+ * Fetch the building topology using common-api config call.
  *
- * @param {string} accessToken
- * @param {string} buildingId
+ * @param accessToken Access token with topology scope
+ * @param buildingId  Building identifier
+ * @param groupId     Target group identifier (defaults to '1')
  */
-export async function fetchBuildingTopology(
+export async function fetchBuildingConfig(
   accessToken: AccessToken,
   buildingId: string,
+  groupId = '1',
 ): Promise<BuildingTopology> {
-  const requestConfig: AxiosRequestConfig = {
-    method: 'GET',
-    url: `${API_TOPOLOGY_ENDPOINT}/${buildingId}`,
-    headers: {
-      Authorization: accessToken,
-    },
+  const connection = await openWebSocketConnection(accessToken);
+  const requestId = uuidv4();
+  const payload = {
+    type: 'common-api',
+    requestId,
+    buildingId,
+    callType: 'config',
+    groupId,
   };
 
-  // Execute the request
   try {
-    logOutgoing('kone fetchBuildingTopology', { buildingId });
-    const result = await axios(requestConfig);
-
-    // Assert data to be our wanted building topology information
-    const buildingTopology = result.data as BuildingTopology;
-    logIncoming('kone fetchBuildingTopology', buildingTopology);
-
+    logOutgoing('kone fetchBuildingConfig', payload);
+    connection.send(JSON.stringify(payload));
+    const response = await waitForResponse(connection, requestId);
+    const buildingTopology = response.data as BuildingTopology;
+    logIncoming('kone fetchBuildingConfig', buildingTopology);
     return buildingTopology;
-  } catch (err) {
-    console.log(err);
-    throw err;
+  } finally {
+    connection.close();
   }
 }
 

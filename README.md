@@ -33,7 +33,7 @@ Create a `.env` file or set environment variables before starting the applicatio
 | `ELEVATOR_APP_SECRET` | Secret associated with the application. |
 | `KONE_BUILDING_ID` | Identifier of the building to control. |
 | `PORT` | (optional) HTTP port for the server. Defaults to `3000`. |
-| `API_HOSTNAME`, `API_AUTH_TOKEN_ENDPOINT`, `API_AUTH_LIMITED_TOKEN_ENDPOINT`, `API_RESOURCES_ENDPOINT`, `API_TOPOLOGY_ENDPOINT`, `WEBSOCKET_ENDPOINT`, `WEBSOCKET_SUBPROTOCOL` | (optional) Override default KONE API endpoints. |
+| `API_HOSTNAME`, `API_AUTH_TOKEN_ENDPOINT`, `API_AUTH_LIMITED_TOKEN_ENDPOINT`, `API_RESOURCES_ENDPOINT`, `WEBSOCKET_ENDPOINT`, `WEBSOCKET_SUBPROTOCOL` | (optional) Override default KONE API endpoints. |
 
 ## Running the service
 
