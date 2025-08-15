@@ -7,8 +7,8 @@ on:
 env:
   PROJECT_ID: sebotics
   REGION: europe-west1
+  REPO_NAME: cloud-run-source-deploy
   SERVICE_NAME: robot-elevator-middleware
-  IMAGE: europe-west1-docker.pkg.dev/sebotics/cloud-run-source-deploy/robot-elevator-middleware:latest
 
 jobs:
   test-build-deploy:
@@ -16,6 +16,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+
     steps:
       - uses: actions/checkout@v4
 
@@ -37,19 +38,42 @@ jobs:
         with:
           project_id: ${{ env.PROJECT_ID }}
 
-      - run: gcloud services enable run.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com
+      # Compute image names from env + GitHub SHA and export to $GITHUB_ENV
+      - name: Compute image tags
+        run: |
+          HOST="${REGION}-docker.pkg.dev"
+          BASE="${HOST}/${PROJECT_ID}/${REPO_NAME}/${SERVICE_NAME}"
+          echo "IMAGE_SHA=${BASE}:${GITHUB_SHA}" >> "$GITHUB_ENV"
+          echo "IMAGE_LATEST=${BASE}:latest" >> "$GITHUB_ENV"
+          echo "REGISTRY_HOST=${HOST}" >> "$GITHUB_ENV"
 
-      - run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+      - run: gcloud auth configure-docker ${{ env.REGISTRY_HOST }} --quiet
 
-      - run: docker build -t $IMAGE .
+      # Build once, tag twice
+      - name: Build image
+        run: |
+          docker build -t "${IMAGE_SHA}" .
+          docker tag "${IMAGE_SHA}" "${IMAGE_LATEST}"
 
-      - run: docker push $IMAGE
+      - name: Push images
+        run: |
+          docker push "${IMAGE_SHA}"
+          docker push "${IMAGE_LATEST}"
 
-      - run: |
-          gcloud run deploy $SERVICE_NAME \
-            --image $IMAGE \
+      # Ensure secrets/env type is normalized before deploy (idempotent)
+      - name: Clear existing env vars/secrets on Cloud Run service
+        run: |
+          gcloud run services update "$SERVICE_NAME" \
+            --region "$REGION" \
+            --clear-env-vars ELEVATOR_APP_SECRET,KONE_CLIENT_ID,KONE_CLIENT_SECRET \
+            --clear-secrets ELEVATOR_APP_SECRET,KONE_CLIENT_ID,KONE_CLIENT_SECRET || true
+
+      - name: Deploy to Cloud Run (commit SHA)
+        run: |
+          gcloud run deploy "$SERVICE_NAME" \
+            --image "${IMAGE_SHA}" \
             --platform managed \
-            --region $REGION \
+            --region "$REGION" \
             --port 3000 \
             --allow-unauthenticated \
             --set-secrets ELEVATOR_APP_SECRET=ELEVATOR_APP_SECRET:latest \
