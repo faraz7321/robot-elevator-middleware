@@ -340,7 +340,7 @@ export class ElevatorService {
     // Wait for both acknowledgement and call event
     const [wsResponse, callEvent]: [WebSocketResponse, CallEvent] =
       await Promise.all([
-        waitForResponse(webSocketConnection, String(requestId)),
+        waitForResponse(webSocketConnection, String(requestId), 10, true),
         callEventPromise,
       ]);
     logIncoming('kone websocket acknowledgement', wsResponse);

@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import WebSocket from 'ws';
-import { fetchBuildingConfig } from './koneapi';
+import { fetchBuildingConfig, waitForResponse } from './koneapi';
 import { BuildingTopology } from './types';
 
 class MockWebSocket extends EventEmitter {
@@ -30,5 +30,19 @@ describe('fetchBuildingConfig', () => {
     const ws = new MockWebSocket() as unknown as WebSocket;
     const topology = await fetchBuildingConfig(ws, 'building:1', '1');
     expect(topology).toEqual(dummyTopology);
+  });
+});
+
+describe('waitForResponse', () => {
+  it('resolves when response requestId is numeric', async () => {
+    const ws = new EventEmitter();
+    const promise = waitForResponse(ws as any, '123', 1, true);
+    setImmediate(() => {
+      ws.emit('message', JSON.stringify({ requestId: 123, statusCode: 201 }));
+    });
+    await expect(promise).resolves.toMatchObject({
+      requestId: 123,
+      statusCode: 201,
+    });
   });
 });

@@ -240,7 +240,7 @@ export type MonitorEvents = Array<'call' | 'deck' | 'door'>;
 /**
  * Unique request Identifier
  */
-export type RequestId = string;
+export type RequestId = string | number;
 
 /**
  * Unique session Identifier

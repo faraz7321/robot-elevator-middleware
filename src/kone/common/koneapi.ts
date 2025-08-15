@@ -12,6 +12,7 @@ import {
   WebSocketCreateSessionResponse,
   StatusCode,
   AccessToken,
+  RequestId,
   CreateSessionPayload,
   ResumeSessionPayload,
   WebSocketResumeSessionResponse,
@@ -513,7 +514,7 @@ export const validateClientIdAndClientSecret = (
  */
 export async function waitForResponse(
   webSocketConnection: WebSocket,
-  requestId: string,
+  requestId: RequestId,
   timeoutSeconds = 10,
   resolveAny = false,
 ): Promise<WebSocketResponse> {
@@ -526,7 +527,7 @@ export async function waitForResponse(
     const onMessage = function (data: string) {
       try {
         const dataBlob = JSON.parse(data);
-        if (dataBlob.requestId === requestId) {
+        if (String(dataBlob.requestId) === String(requestId)) {
           if (
             !resolveAny &&
             dataBlob.type !== 'ok' &&
