@@ -33,9 +33,6 @@ const API_AUTH_LIMITED_TOKEN_ENDPOINT =
 const API_RESOURCES_ENDPOINT =
   process.env.API_RESOURCES_ENDPOINT ||
   `https://${API_HOSTNAME}/api/v1/application/self/resources`;
-const API_TOPOLOGY_ENDPOINT =
-  process.env.API_TOPOLOGY_ENDPOINT ||
-  `https://${API_HOSTNAME}/api/v1/buildings`;
 const WEBSOCKET_ENDPOINT =
   process.env.WEBSOCKET_ENDPOINT || `wss://${API_HOSTNAME}/stream-v2`;
 
@@ -180,38 +177,72 @@ export const fetchResources = async (
 };
 
 /**
- * Function is used to fetch the topology of the given building.
- * It is good practice to fetch the topology once and then cache it for further use.
+ * Fetch the building topology using common-api config call.
  *
- * @param {string} accessToken
- * @param {string} buildingId
+ * @param accessToken Access token with topology scope
+ * @param buildingId  Building identifier
+ * @param groupId     Target group identifier (defaults to '1')
  */
 export async function fetchBuildingTopology(
   accessToken: AccessToken,
   buildingId: string,
+  groupId = '1',
 ): Promise<BuildingTopology> {
-  const requestConfig: AxiosRequestConfig = {
-    method: 'GET',
-    url: `${API_TOPOLOGY_ENDPOINT}/${buildingId}`,
-    headers: {
-      Authorization: accessToken,
-    },
+  const connection = await openWebSocketConnection(accessToken);
+  const requestId = uuidv4();
+  const payload = {
+    type: 'common-api',
+    requestId,
+    buildingId,
+    callType: 'config',
+    groupId,
   };
 
-  // Execute the request
   try {
-    logOutgoing('kone fetchBuildingTopology', { buildingId });
-    const result = await axios(requestConfig);
-
-    // Assert data to be our wanted building topology information
-    const buildingTopology = result.data as BuildingTopology;
-    logIncoming('kone fetchBuildingTopology', buildingTopology);
-
+    logOutgoing('kone fetchBuildingConfig', payload);
+    connection.send(JSON.stringify(payload));
+    const response = await waitForResponse(connection, requestId);
+    const buildingTopology = response.data as BuildingTopology;
+    logIncoming('kone fetchBuildingConfig', buildingTopology);
     return buildingTopology;
-  } catch (err) {
-    console.log(err);
-    throw err;
+  } finally {
+    connection.close();
   }
+}
+
+/**
+ * Fetch building configuration via WebSocket common-api config call.
+ *
+ * @param connection Open WebSocket connection
+ * @param buildingId Target building identifier
+ * @param groupId Target group identifier within the building
+ */
+export async function fetchBuildingConfig(
+  connection: WebSocket,
+  buildingId: string,
+  groupId: string,
+): Promise<BuildingTopology> {
+  const requestId = uuidv4();
+  const payload = {
+    type: 'common-api',
+    requestId,
+    buildingId,
+    callType: 'config',
+    groupId,
+  };
+
+  logOutgoing('kone fetchBuildingConfig', { buildingId, groupId });
+  connection.send(JSON.stringify(payload));
+  const response = await waitForResponse(connection, requestId, 10);
+  logIncoming('kone fetchBuildingConfig', response);
+
+  const topology =
+    (response as any).data?.topology ||
+    (response as any).payload?.topology ||
+    (response as any).data ||
+    (response as any).payload;
+
+  return topology as BuildingTopology;
 }
 
 /**
@@ -507,7 +538,11 @@ export async function waitForResponse(
     const onMessage = function (data: string) {
       try {
         const dataBlob = JSON.parse(data);
-        if (dataBlob.type === 'ok' && dataBlob.requestId === requestId) {
+        if (
+          dataBlob.requestId === requestId &&
+          (dataBlob.type === 'ok' ||
+            ('config' && dataBlob.callType === 'config'))
+        ) {
           clearTimeout(timer);
           webSocketConnection.off('message', onMessage);
           resolve(dataBlob);

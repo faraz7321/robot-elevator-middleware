@@ -2,13 +2,13 @@ import { ElevatorService } from './elevator.service';
 import { AccessTokenService } from '../../auth/service/accessToken.service';
 import { CallElevatorRequestDTO } from '../dtos/call/CallElevatorRequestDTO';
 import {
-  fetchBuildingTopology,
+  fetchBuildingConfig,
   openWebSocketConnection,
   waitForResponse,
 } from '../../common/koneapi';
 
 jest.mock('../../common/koneapi', () => ({
-  fetchBuildingTopology: jest.fn(),
+  fetchBuildingConfig: jest.fn(),
   openWebSocketConnection: jest.fn(),
   waitForResponse: jest.fn(),
 }));
@@ -27,7 +27,7 @@ describe('ElevatorService callElevator', () => {
       .fn()
       .mockResolvedValue({ result: [{ mode: 'NOR' }] });
     Object.assign(service, { getLiftStatus: getLiftStatusMock });
-    (fetchBuildingTopology as jest.Mock).mockResolvedValue({
+    (fetchBuildingConfig as jest.Mock).mockResolvedValue({
       groups: [{ groupId: 'gid:1', lifts: [] }],
       areas: [],
     });
