@@ -52,10 +52,10 @@ export class AccessTokenService {
       : buildingId;
     const groupId = 1;
     //scopes.push(`topology/building:${id}:1`);
-    scopes.push(`robotcall/*`);
-    scopes.push('callgiving/*');
+    scopes.push(`robotcall/group:${id}:${groupId}`);
+    //scopes.push(`callgiving/group:${id}:${groupId}`);
     scopes.push('application/inventory');
-    scopes.push('equipmentstatus/*');
+    //scopes.push('equipmentstatus/*');
     return scopes;
   }
 }
