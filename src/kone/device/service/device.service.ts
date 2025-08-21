@@ -29,22 +29,18 @@ export class DeviceService {
     // Check if already registered
     if (this.deviceRegistry.has(request.deviceUuid)) {
       const existing = this.deviceRegistry.get(request.deviceUuid)!;
-      response.result = [
-        {
-          deviceUuid: request.deviceUuid,
-          deviceMac: existing.deviceMac,
-          deviceSecret: existing.deviceSecret,
-        },
-      ];
+      response.result = {
+        deviceUuid: request.deviceUuid,
+        deviceMac: existing.deviceMac,
+        deviceSecret: existing.deviceSecret,
+      };
       response.errcode = 0;
       response.errmsg = 'SUCCESS';
       return response;
     }
     // Generate device secret (24-char hex)
     const rawSecret = randomBytes(12).toString('hex');
-    const deviceSecret = createHash('sha256')
-      .update(rawSecret)
-      .digest('hex');
+    const deviceSecret = createHash('sha256').update(rawSecret).digest('hex');
 
     // Store hashed secret in memory
     this.deviceRegistry.set(request.deviceUuid, {
@@ -58,7 +54,7 @@ export class DeviceService {
       deviceSecret,
     };
 
-    response.result = [result];
+    response.result = result;
     response.errcode = 0;
     response.errmsg = 'SUCCESS';
     return response;
