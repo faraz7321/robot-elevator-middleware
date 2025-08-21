@@ -1,11 +1,10 @@
 import { RegisterDeviceResultDTO } from './RegisterDeviceResultDTO';
-import { IsArray, ValidateNested } from 'class-validator';
+import { ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { BaseResponseDTO } from '../../../baseDtos/BaseResponseDTO';
 
 export class RegisterDeviceResponseDTO extends BaseResponseDTO {
-  @ValidateNested({ each: true })
-  @IsArray()
+  @ValidateNested()
   @Type(() => RegisterDeviceResultDTO)
-  result: RegisterDeviceResultDTO[];
+  result: RegisterDeviceResultDTO;
 }
