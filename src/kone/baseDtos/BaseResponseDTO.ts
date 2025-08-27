@@ -1,11 +1,9 @@
-import {IsNumber, IsString} from "class-validator";
-
+import { IsNumber, IsString } from 'class-validator';
 
 export class BaseResponseDTO {
-    @IsNumber()
-    errcode: number;
+  @IsNumber()
+  errcode: number;
 
-    @IsString()
-    errmsg: string;
-
+  @IsString()
+  errmsg: string;
 }

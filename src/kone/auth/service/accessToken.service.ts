@@ -1,15 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import axios from 'axios';
 import {
   fetchAccessToken,
-  openWebSocketConnection,
   validateClientIdAndClientSecret,
 } from '../../common/koneapi';
+import { BUILDING_ID_PREFIX } from '../../common/types';
 import { AccessTokenData } from '../dto/AccessTokenData';
 
 @Injectable()
 export class AccessTokenService {
-  private KONE_CLIENT_ID: string = process.env.KONE_CLIENT_ID || 'YOUR_CLIENT_ID';
+  private KONE_CLIENT_ID: string =
+    process.env.KONE_CLIENT_ID || 'YOUR_CLIENT_ID';
   private KONE_CLIENT_SECRET: string =
     process.env.KONE_CLIENT_SECRET || 'YOUR_CLIENT_SECRET';
 
@@ -18,10 +18,13 @@ export class AccessTokenService {
     AccessTokenData
   >();
 
-  async getAccessToken(placeId: string): Promise<string> {
-    validateClientIdAndClientSecret(this.KONE_CLIENT_ID, this.KONE_CLIENT_SECRET);
-    let scopes = this.getScopes(placeId);
-    let existingAccessToken: AccessTokenData | undefined =
+  async getAccessToken(buildingId: string): Promise<string> {
+    validateClientIdAndClientSecret(
+      this.KONE_CLIENT_ID,
+      this.KONE_CLIENT_SECRET,
+    );
+    const scopes = this.getScopes(buildingId);
+    const existingAccessToken: AccessTokenData | undefined =
       this.scopeToTokenMap.get(scopes.join(' '));
     if (existingAccessToken && Date.now() < existingAccessToken.expiresAt) {
       // Token is still valid
@@ -42,7 +45,17 @@ export class AccessTokenService {
     return accessTokenData.access_token;
   }
 
-  private getScopes(placeId: string): string[] {
-    return ['application/inventory', `callgiving/group:${placeId}:1`];
+  private getScopes(buildingId: string): string[] {
+    const scopes = ['application/inventory'];
+    const id = buildingId.startsWith(BUILDING_ID_PREFIX)
+      ? buildingId.slice(BUILDING_ID_PREFIX.length)
+      : buildingId;
+    const groupId = 1;
+    //scopes.push(`topology/building:${id}:1`);
+    scopes.push(`robotcall/group:${id}:${groupId}`);
+    //scopes.push(`callgiving/group:${id}:${groupId}`);
+    scopes.push('application/inventory');
+    //scopes.push('equipmentstatus/*');
+    return scopes;
   }
 }

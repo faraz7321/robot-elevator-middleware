@@ -4,7 +4,7 @@ import { RegisterDeviceResponseDTO } from '../dto/register/RegisterDeviceRespons
 import { BindDeviceRequestDTO } from '../dto/bind/BindDeviceRequestDTO';
 import { BindDeviceResponseDTO } from '../dto/bind/BindDeviceResponseDTO';
 import { RegisterDeviceResultDTO } from '../dto/register/RegisterDeviceResultDTO';
-import { randomBytes } from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 import { BindDeviceResultDTO } from '../dto/bind/BindDeviceResultDTO';
 
 @Injectable()
@@ -29,21 +29,20 @@ export class DeviceService {
     // Check if already registered
     if (this.deviceRegistry.has(request.deviceUuid)) {
       const existing = this.deviceRegistry.get(request.deviceUuid)!;
-      response.result = [
-        {
-          deviceUuid: request.deviceUuid,
-          deviceMac: existing.deviceMac,
-          deviceSecret: existing.deviceSecret,
-        },
-      ];
+      response.result = {
+        deviceUuid: request.deviceUuid,
+        deviceMac: existing.deviceMac,
+        deviceSecret: existing.deviceSecret,
+      };
       response.errcode = 0;
       response.errmsg = 'SUCCESS';
       return response;
     }
     // Generate device secret (24-char hex)
-    const deviceSecret = randomBytes(12).toString('hex');
+    const rawSecret = randomBytes(12).toString('hex');
+    const deviceSecret = createHash('sha256').update(rawSecret).digest('hex');
 
-    // Store in memory
+    // Store hashed secret in memory
     this.deviceRegistry.set(request.deviceUuid, {
       deviceSecret,
       deviceMac: request.deviceMac,
@@ -55,10 +54,22 @@ export class DeviceService {
       deviceSecret,
     };
 
-    response.result = [result];
+    response.result = result;
     response.errcode = 0;
     response.errmsg = 'SUCCESS';
     return response;
+  }
+
+  getDeviceSecret(deviceUuid: string): string | undefined {
+    return this.deviceRegistry.get(deviceUuid)?.deviceSecret;
+  }
+
+  /**
+   * Check if a device is bound to a specific lift number
+   */
+  isDeviceBoundToLift(deviceUuid: string, liftNo: number): boolean {
+    const bindings = this.deviceBindings.get(deviceUuid);
+    return bindings ? bindings.has(liftNo) : false;
   }
 
   bindDevice(request: BindDeviceRequestDTO): BindDeviceResponseDTO {

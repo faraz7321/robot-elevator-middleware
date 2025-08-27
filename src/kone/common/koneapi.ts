@@ -3,6 +3,7 @@ import querystring from 'querystring';
 import WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import _ from 'lodash';
+import { logIncoming, logOutgoing } from './logger';
 
 import {
   BuildingTopology,
@@ -11,16 +12,19 @@ import {
   WebSocketCreateSessionResponse,
   StatusCode,
   AccessToken,
+  RequestId,
   CreateSessionPayload,
   ResumeSessionPayload,
   WebSocketResumeSessionResponse,
 } from './types';
-import {AccessTokenData} from "../auth/dto/AccessTokenData";
 
 /**
  * Variables that contain the main endpoints used in this demo project.
  */
 const API_HOSTNAME = process.env.API_HOSTNAME || 'dev.kone.com';
+const API_AUTH_TOKEN_ENDPOINT_V1 =
+  process.env.API_AUTH_TOKEN_ENDPOINT_V1 ||
+  `https://${API_HOSTNAME}/api/v1/oauth2/token`;
 const API_AUTH_TOKEN_ENDPOINT_V2 =
   process.env.API_AUTH_TOKEN_ENDPOINT ||
   `https://${API_HOSTNAME}/api/v2/oauth2/token`;
@@ -30,9 +34,6 @@ const API_AUTH_LIMITED_TOKEN_ENDPOINT =
 const API_RESOURCES_ENDPOINT =
   process.env.API_RESOURCES_ENDPOINT ||
   `https://${API_HOSTNAME}/api/v1/application/self/resources`;
-const API_TOPOLOGY_ENDPOINT =
-  process.env.API_TOPOLOGY_ENDPOINT ||
-  `https://${API_HOSTNAME}/api/v1/buildings`;
 const WEBSOCKET_ENDPOINT =
   process.env.WEBSOCKET_ENDPOINT || `wss://${API_HOSTNAME}/stream-v2`;
 
@@ -41,7 +42,9 @@ const WEBSOCKET_SUBPROTOCOL = process.env.WEBSOCKET_SUBPROTOCOL || 'koneapi';
 /**
  * Fetch the token using the client-credentials flow. In this case, we assume that the user wants to fetch a token
  * that will be used to receive the accessible buildings. Once the user knows the building of interest,
- * a new token has to be generated with the correct callgiving/BUILDING_ID in scope.
+ * a new token has to be generated with group-level scopes like
+ * robotcall/group:BUILDING_ID:GROUP_ID, callgiving/group:BUILDING_ID:GROUP_ID,
+ * and topology/group:BUILDING_ID:GROUP_ID.
  * That is why in the start() flow, this function is invoked twice.
  *
  * @param {string} clientId
@@ -53,9 +56,13 @@ export async function fetchAccessToken(
   clientSecret: string,
   scopes?: string[],
 ): Promise<any> {
+  const endpoint = scopes?.some((s) => s.includes('building:'))
+    ? API_AUTH_TOKEN_ENDPOINT_V1
+    : API_AUTH_TOKEN_ENDPOINT_V2;
+
   const requestConfig: AxiosRequestConfig = {
     method: 'POST',
-    url: API_AUTH_TOKEN_ENDPOINT_V2,
+    url: endpoint,
     auth: {
       username: clientId,
       password: clientSecret,
@@ -70,12 +77,12 @@ export async function fetchAccessToken(
   };
 
   try {
+    logOutgoing('kone fetchAccessToken', { scopes });
     const requestResult = await axios(requestConfig);
-    console.log(`Access token: ${JSON.stringify(requestResult.data)}`);
+    logIncoming('kone fetchAccessToken', requestResult.data);
 
     // get the accessToken from the response
     return requestResult.data;
-
   } catch (authError) {
     let errorMsg = 'Error fetching the access token';
 
@@ -122,7 +129,9 @@ export async function fetchLimitedAccessToken(
     },
   };
 
+  logOutgoing('kone fetchLimitedAccessToken', { scopes, userIdentity });
   const requestResult = await axios(requestConfig);
+  logIncoming('kone fetchLimitedAccessToken', requestResult.data);
 
   // get the accessToken from the response
   const limitedToken = requestResult.data.access_token;
@@ -153,8 +162,9 @@ export const fetchResources = async (
   };
 
   // Execute the request
+  logOutgoing('kone fetchResources', { resourceType });
   const result = await axios(requestConfig);
-  console.log(`Resources: ${result.data}`);
+  logIncoming('kone fetchResources', result.data);
 
   // Assert data to be our wanted list of buildings
   const resources = (result.data as string[]).filter((resource) =>
@@ -168,36 +178,58 @@ export const fetchResources = async (
 };
 
 /**
- * Function is used to fetch the topology of the given building.
- * It is good practice to fetch the topology once and then cache it for further use.
+ * Fetch the building topology using common-api config call.
  *
- * @param {string} accessToken
- * @param {string} buildingId
+ * @param accessToken Access token with topology scope
+ * @param buildingId  Building identifier
+ * @param groupId     Target group identifier (defaults to '1')
  */
 export async function fetchBuildingTopology(
   accessToken: AccessToken,
   buildingId: string,
+  groupId = '1',
 ): Promise<BuildingTopology> {
-  const requestConfig: AxiosRequestConfig = {
-    method: 'GET',
-    url: `${API_TOPOLOGY_ENDPOINT}/${buildingId}`,
-    headers: {
-      Authorization: accessToken,
-    },
+  const connection = await openWebSocketConnection(accessToken);
+  try {
+    return await fetchBuildingConfig(connection, buildingId, groupId);
+  } finally {
+    connection.close();
+  }
+}
+
+/**
+ * Fetch building configuration via WebSocket common-api config call.
+ *
+ * @param connection Open WebSocket connection
+ * @param buildingId Target building identifier
+ * @param groupId Target group identifier within the building
+ */
+export async function fetchBuildingConfig(
+  connection: WebSocket,
+  buildingId: string,
+  groupId: string,
+): Promise<BuildingTopology> {
+  const requestId = uuidv4();
+  const payload = {
+    type: 'common-api',
+    requestId,
+    buildingId,
+    callType: 'config',
+    groupId,
   };
 
-  // Execute the request
-  try {
-    const result = await axios(requestConfig);
+  logOutgoing('kone fetchBuildingConfig', { buildingId, groupId });
+  connection.send(JSON.stringify(payload));
+  const response = await waitForResponse(connection, requestId, 10);
+  logIncoming('kone fetchBuildingConfig', response);
 
-    // Assert data to be our wanted building topology information
-    const buildingTopology = result.data as BuildingTopology;
+  const topology =
+    (response as any).data?.topology ||
+    (response as any).payload?.topology ||
+    (response as any).data ||
+    (response as any).payload;
 
-    return buildingTopology;
-  } catch (err) {
-    console.log(err);
-    throw err;
-  }
+  return topology as BuildingTopology;
 }
 
 /**
@@ -242,9 +274,7 @@ export async function openWebSocketConnection(
       reject(statusCode);
     });
 
-    ws.on('open', async (_event: any) => {
-      console.log('web socket connection opened ');
-      console.log(ws.url.split('?'));
+    ws.on('open', async () => {
       // Once the connection is open, resolve promise with the WebSocket instance
       ws.removeAllListeners('close');
       resolve(ws);
@@ -320,7 +350,7 @@ export async function connectWithSession(
   let incrementalRetryDelay: number;
 
   // Initialize new session with closed status
-  let session: WebSocketSession = new WebSocketSession();
+  const session: WebSocketSession = new WebSocketSession();
   session.connectionStatus = 'closed';
   session.accessToken = accessToken;
 
@@ -392,7 +422,9 @@ export async function connectWithSession(
         // Re-emit events through the session instance in parsed JSON format
         session.emit('session-event', messageJson);
       }
-    } catch (error) {} // Ignore non-JSON messages
+    } catch {
+      // Ignore non-JSON messages
+    }
   }
 
   // Utility function for cleaning up connection listeners when closing the connection
@@ -478,11 +510,13 @@ export const validateClientIdAndClientSecret = (
  * @param webSocketConnection
  * @param requestId
  * @param timeoutSeconds
+ * @param resolveAny Whether to resolve on any matching message (e.g. service acks)
  */
 export async function waitForResponse(
   webSocketConnection: WebSocket,
-  requestId: string,
+  requestId: RequestId,
   timeoutSeconds = 10,
+  resolveAny = false,
 ): Promise<WebSocketResponse> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -493,19 +527,31 @@ export async function waitForResponse(
     const onMessage = function (data: string) {
       try {
         const dataBlob = JSON.parse(data);
-        if (dataBlob.type === 'ok' && dataBlob.requestId === requestId) {
+        if (String(dataBlob.requestId) === String(requestId)) {
+          if (
+            !resolveAny &&
+            dataBlob.type !== 'ok' &&
+            dataBlob.callType !== 'config'
+          ) {
+            if (dataBlob.type === 'error') {
+              clearTimeout(timer);
+              webSocketConnection.off('message', onMessage);
+              reject(dataBlob);
+            }
+            return;
+          }
+
           clearTimeout(timer);
           webSocketConnection.off('message', onMessage);
-          resolve(dataBlob);
-        } else if (
-          dataBlob.type === 'error' &&
-          dataBlob.requestId === requestId
-        ) {
-          clearTimeout(timer);
-          webSocketConnection.off('message', onMessage);
-          reject(dataBlob);
+          if (dataBlob.type === 'error') {
+            reject(dataBlob);
+          } else {
+            resolve(dataBlob);
+          }
         }
-      } catch (error) {}
+      } catch {
+        // Ignore non-JSON messages
+      }
     };
     // Push onMessage handler to the top of listener list to receive event as early as possible
     webSocketConnection.prependListener('message', onMessage);

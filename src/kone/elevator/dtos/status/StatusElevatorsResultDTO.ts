@@ -1,4 +1,4 @@
-import { IsNumber } from 'class-validator';
+import { IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class ListElevatorsResultDTO {
   @IsNumber()
@@ -15,4 +15,9 @@ export class ListElevatorsResultDTO {
 
   @IsNumber()
   liftDoorStatus: number;
+
+  // Lift mode as provided by lift-status payload
+  @IsOptional()
+  @IsString()
+  mode?: string;
 }

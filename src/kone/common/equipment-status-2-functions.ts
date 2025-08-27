@@ -1,18 +1,25 @@
-import axios, { AxiosRequestConfig } from 'axios'
-import { AccessToken, Availability, Status, Movement, DoorEvent, Button, EscalatorMovement} from './types'
+import axios, { AxiosRequestConfig } from 'axios';
+import {
+  AccessToken,
+  Availability,
+  Status,
+  Movement,
+  DoorEvent,
+  Button,
+  EscalatorMovement,
+} from './types';
 
-const API_HOSTNAME = process.env.API_HOSTNAME || 'dev.kone.com'
-const API_EQUIPMENT_STATUS_2_COMMON_ENDPOINT = `https://${API_HOSTNAME}/api/v2/equipment/search`
-const API_EQUIPMENT_STATUS_2_ENDPOINT_DOOR_BUTTON = `https://${API_HOSTNAME}/api/v2/equipment/elevator`
-const API_EQUIPMENT_STATUS_2_ENDPOINT_ESC = `https://${API_HOSTNAME}/api/v2/equipment/escalator/movement`
-
+const API_HOSTNAME = process.env.API_HOSTNAME || 'dev.kone.com';
+const API_EQUIPMENT_STATUS_2_COMMON_ENDPOINT = `https://${API_HOSTNAME}/api/v2/equipment/search`;
+const API_EQUIPMENT_STATUS_2_ENDPOINT_DOOR_BUTTON = `https://${API_HOSTNAME}/api/v2/equipment/elevator`;
+const API_EQUIPMENT_STATUS_2_ENDPOINT_ESC = `https://${API_HOSTNAME}/api/v2/equipment/escalator/movement`;
 
 async function executeRequest(
   accessToken: AccessToken,
   endpoint: string,
   equipmentIds: string[],
   errorMessage: string,
-  baseUrl: string
+  baseUrl: string,
 ) {
   const requestConfig: AxiosRequestConfig = {
     method: 'POST',
@@ -22,13 +29,13 @@ async function executeRequest(
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-  }
+  };
 
   try {
-    const result = await axios(requestConfig)
-    return result.data
+    const result = await axios(requestConfig);
+    return result.data;
   } catch (error: any) {
-    console.error(errorMessage, error?.message)
+    console.error(errorMessage, error?.message);
   }
 }
 
@@ -40,15 +47,15 @@ async function executeRequest(
 
 export async function fetchEquipmentAvailability(
   accessToken: AccessToken,
-  equipmentIds: string[]
+  equipmentIds: string[],
 ): Promise<Availability> {
   return executeRequest(
     accessToken,
     'availability',
     equipmentIds,
     'Failed to fetch availability information',
-    API_EQUIPMENT_STATUS_2_COMMON_ENDPOINT
-  )
+    API_EQUIPMENT_STATUS_2_COMMON_ENDPOINT,
+  );
 }
 
 /**
@@ -58,15 +65,15 @@ export async function fetchEquipmentAvailability(
  */
 export async function fetchEquipmentStatus(
   accessToken: AccessToken,
-  equipmentIds: string[]
+  equipmentIds: string[],
 ): Promise<Status> {
   return executeRequest(
     accessToken,
     'status',
     equipmentIds,
     'Failed to fetch status information',
-    API_EQUIPMENT_STATUS_2_COMMON_ENDPOINT
-  )
+    API_EQUIPMENT_STATUS_2_COMMON_ENDPOINT,
+  );
 }
 
 /**
@@ -76,15 +83,15 @@ export async function fetchEquipmentStatus(
  */
 export async function fetchEquipmentMovement(
   accessToken: AccessToken,
-  equipmentIds: string[]
+  equipmentIds: string[],
 ): Promise<Movement> {
   return executeRequest(
     accessToken,
     'movement',
     equipmentIds,
     'Failed to fetch movement information',
-    API_EQUIPMENT_STATUS_2_COMMON_ENDPOINT
-  )
+    API_EQUIPMENT_STATUS_2_COMMON_ENDPOINT,
+  );
 }
 
 /**
@@ -94,15 +101,15 @@ export async function fetchEquipmentMovement(
  */
 export async function fetchDoorEvent(
   accessToken: AccessToken,
-  equipmentIds: string[]
+  equipmentIds: string[],
 ): Promise<DoorEvent> {
   return executeRequest(
     accessToken,
     'door',
     equipmentIds,
     'Failed to fetch door information',
-    API_EQUIPMENT_STATUS_2_ENDPOINT_DOOR_BUTTON
-  )
+    API_EQUIPMENT_STATUS_2_ENDPOINT_DOOR_BUTTON,
+  );
 }
 
 /**
@@ -112,15 +119,15 @@ export async function fetchDoorEvent(
  */
 export async function fetchButtonEvent(
   accessToken: AccessToken,
-  equipmentIds: string[]
+  equipmentIds: string[],
 ): Promise<Button> {
   return executeRequest(
     accessToken,
     'button',
     equipmentIds,
     'Failed to fetch button information',
-    API_EQUIPMENT_STATUS_2_ENDPOINT_DOOR_BUTTON
-  )
+    API_EQUIPMENT_STATUS_2_ENDPOINT_DOOR_BUTTON,
+  );
 }
 
 /**
@@ -130,13 +137,13 @@ export async function fetchButtonEvent(
  */
 export async function fetchEscalatorEvent(
   accessToken: AccessToken,
-  equipmentIds: string[]
+  equipmentIds: string[],
 ): Promise<EscalatorMovement> {
   return executeRequest(
     accessToken,
     'direction',
     equipmentIds,
     'Failed to fetch button information',
-    API_EQUIPMENT_STATUS_2_ENDPOINT_ESC
-  )
+    API_EQUIPMENT_STATUS_2_ENDPOINT_ESC,
+  );
 }

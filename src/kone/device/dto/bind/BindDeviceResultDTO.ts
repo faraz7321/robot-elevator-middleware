@@ -1,12 +1,9 @@
-import {IsNumber, IsString} from "class-validator";
-
+import { IsNumber, IsString } from 'class-validator';
 
 export class BindDeviceResultDTO {
+  @IsString()
+  bindingStatus: string;
 
-    @IsString()
-    bindingStatus: string;
-
-    @IsNumber()
-    liftNo: number;
-
+  @IsNumber()
+  liftNo: number;
 }

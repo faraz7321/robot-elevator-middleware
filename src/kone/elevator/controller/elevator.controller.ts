@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Post, UnauthorizedException } from '@nestjs/common';
 import { ElevatorService } from '../service/elevator.service';
 import { LiftStatusRequestDTO } from '../dtos/status/LiftStatusRequestDTO';
 import { LiftStatusResponseDTO } from '../dtos/status/LiftStatusResponseDTO';
@@ -9,50 +9,151 @@ import { ReserveAndCancelRequestDTO } from '../dtos/reserve/ReserveAndCancelRequ
 import { ListElevatorsRequestDTO } from '../dtos/list/ListElevatorsRequestDTO';
 import { ListElevatorsResponseDTO } from '../dtos/list/ListElevatorsResponseDTO';
 import { validateSignedRequest } from '../../common/verify-signature';
+import { DeviceService } from '../../device/service/device.service';
 import * as dotenv from 'dotenv';
-
+import { CallElevatorResponseDTO } from '../dtos/call/CallElevatorResponseDTO';
+import { logIncoming, logOutgoing } from '../../common/logger';
 dotenv.config();
 
 @Controller('lift')
 export class ElevatorController {
-  constructor(private readonly elevatorService: ElevatorService) {}
+  constructor(
+    private readonly elevatorService: ElevatorService,
+    private readonly deviceService: DeviceService,
+  ) {}
 
   @Post('list')
-  listElevators(
+  async listElevators(
     @Body() request: ListElevatorsRequestDTO,
-  ): ListElevatorsResponseDTO {
-    validateSignedRequest(request);
-    return this.elevatorService.listElevators(request);
+  ): Promise<ListElevatorsResponseDTO> {
+    logIncoming('robot /openapi/v5/lift/list', request);
+    const deviceSecret = this.deviceService.getDeviceSecret(request.deviceUuid);
+    if (!deviceSecret) {
+      throw new UnauthorizedException('Device not registered');
+    }
+    validateSignedRequest(request, deviceSecret);
+    const response = await this.elevatorService.listElevators(request);
+    logOutgoing('robot /openapi/v5/lift/list', response);
+    return response;
   }
 
   @Post('status')
-  getLiftStatus(@Body() request: LiftStatusRequestDTO): LiftStatusResponseDTO {
-    validateSignedRequest(request);
-    return this.elevatorService.getLiftStatus(request);
+  async getLiftStatus(
+    @Body() request: LiftStatusRequestDTO,
+  ): Promise<LiftStatusResponseDTO> {
+    logIncoming('robot /openapi/v5/lift/status', request);
+    const deviceSecret = this.deviceService.getDeviceSecret(request.deviceUuid);
+    if (!deviceSecret) {
+      throw new UnauthorizedException('Device not registered');
+    }
+    validateSignedRequest(request, deviceSecret);
+    // Ignore status request if device is not bound to the lift
+    const isBoundStatus =
+      typeof (this.deviceService as any).isDeviceBoundToLift === 'function'
+        ? (this.deviceService as any).isDeviceBoundToLift(
+            request.deviceUuid,
+            request.liftNo,
+          )
+        : true;
+    if (!isBoundStatus) {
+      const errorRes = new LiftStatusResponseDTO();
+      errorRes.errcode = 1;
+      errorRes.errmsg = 'Device not bound to lift';
+      logOutgoing('robot /openapi/v5/lift/status', errorRes);
+      return errorRes;
+    }
+    const response = await this.elevatorService.getLiftStatus(request);
+    logOutgoing('robot /openapi/v5/lift/status', response);
+    return response;
   }
 
   @Post('call')
-  async call(
+  async callElevator(
     @Body() request: CallElevatorRequestDTO,
-  ): Promise<BaseResponseDTO> {
-    validateSignedRequest(request);
-
-    return this.elevatorService.callElevator(request);
+  ): Promise<CallElevatorResponseDTO> {
+    logIncoming('robot /openapi/v5/lift/call', request);
+    const deviceSecret = this.deviceService.getDeviceSecret(request.deviceUuid);
+    if (!deviceSecret) {
+      throw new UnauthorizedException('Device not registered');
+    }
+    validateSignedRequest(request, deviceSecret);
+    // Ensure the device is bound to the requested lift before making the call
+    const isBound =
+      typeof (this.deviceService as any).isDeviceBoundToLift === 'function'
+        ? (this.deviceService as any).isDeviceBoundToLift(
+            request.deviceUuid,
+            request.liftNo,
+          )
+        : true;
+    if (!isBound) {
+      const errorRes = new CallElevatorResponseDTO();
+      errorRes.errcode = 1;
+      errorRes.errmsg = 'Device not bound to lift';
+      logOutgoing('robot /openapi/v5/lift/call', errorRes);
+      return errorRes;
+    }
+    const response = await this.elevatorService.callElevator(request);
+    logOutgoing('robot /openapi/v5/lift/call', response);
+    return response;
   }
 
   @Post('open')
-  delayElevatorDoors(@Body() request: DelayDoorRequestDTO): BaseResponseDTO {
-    validateSignedRequest(request);
-
-    return this.elevatorService.delayElevatorDoors(request);
+  async delayElevatorDoors(
+    @Body() request: DelayDoorRequestDTO,
+  ): Promise<BaseResponseDTO> {
+    logIncoming('robot /openapi/v5/lift/open', request);
+    const deviceSecret = this.deviceService.getDeviceSecret(request.deviceUuid);
+    if (!deviceSecret) {
+      throw new UnauthorizedException('Device not registered');
+    }
+    validateSignedRequest(request, deviceSecret);
+    // Ignore open request if device is not bound to the lift
+    const isBoundOpen =
+      typeof (this.deviceService as any).isDeviceBoundToLift === 'function'
+        ? (this.deviceService as any).isDeviceBoundToLift(
+            request.deviceUuid,
+            request.liftNo,
+          )
+        : true;
+    if (!isBoundOpen) {
+      const errorRes = new BaseResponseDTO();
+      errorRes.errcode = 1;
+      errorRes.errmsg = 'Device not bound to lift';
+      logOutgoing('robot /openapi/v5/lift/open', errorRes);
+      return errorRes;
+    }
+    const response = await this.elevatorService.delayElevatorDoors(request);
+    logOutgoing('robot /openapi/v5/lift/open', response);
+    return response;
   }
 
   @Post('lock')
-  reserveOrCancelElevator(
+  async reserveOrCancelElevator(
     @Body() request: ReserveAndCancelRequestDTO,
-  ): BaseResponseDTO {
-    validateSignedRequest(request);
-
-    return this.elevatorService.reserveOrCancelCall(request);
+  ): Promise<BaseResponseDTO> {
+    logIncoming('robot /openapi/v5/lift/lock', request);
+    const deviceSecret = this.deviceService.getDeviceSecret(request.deviceUuid);
+    if (!deviceSecret) {
+      throw new UnauthorizedException('Device not registered');
+    }
+    validateSignedRequest(request, deviceSecret);
+    // Ignore lock/unlock request if device is not bound to the lift
+    const isBoundLock =
+      typeof (this.deviceService as any).isDeviceBoundToLift === 'function'
+        ? (this.deviceService as any).isDeviceBoundToLift(
+            request.deviceUuid,
+            request.liftNo,
+          )
+        : true;
+    if (!isBoundLock) {
+      const errorRes = new BaseResponseDTO();
+      errorRes.errcode = 1;
+      errorRes.errmsg = 'Device not bound to lift';
+      logOutgoing('robot /openapi/v5/lift/lock', errorRes);
+      return errorRes;
+    }
+    const response = await this.elevatorService.reserveOrCancelCall(request);
+    logOutgoing('robot /openapi/v5/lift/lock', response);
+    return response;
   }
 }

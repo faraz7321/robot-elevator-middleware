@@ -7,19 +7,16 @@ function md5(str: string): string {
   return crypto.createHash('md5').update(str).digest('hex');
 }
 
-const BIB_DEVICE_UUID = process.env.BIB_DEVICE_UUID || '';
 const ELEVATOR_APP_NAME = process.env.ELEVATOR_APP_NAME || '';
 const ELEVATOR_APP_SECRET = process.env.ELEVATOR_APP_SECRET || '';
-const BIB_DEVICE_SECRET = process.env.BIB_DEVICE_SECRET || '';
 
 export function generateCheck(
   deviceUuid: string,
   ts: number,
   deviceSecret: string,
 ): string {
-  const payload = `${deviceUuid}|${ts}|${deviceSecret}`;
-  console.log('CHECK PAYLOAD:', payload);
-  return md5(payload);
+  //console.log('CHECK PAYLOAD:', payload);
+  return md5(`${deviceUuid}|${ts}|${deviceSecret}`);
 }
 
 export function generateSign(
@@ -48,19 +45,11 @@ export function generateSign(
 export function isValidRequest(
   request: Record<string, any>,
   appSecret: string,
-  deviceSecret: string,
+  deviceSecret?: string,
 ): boolean {
   const { sign, check, ts, appname, deviceUuid } = request;
 
-  if (
-    !sign ||
-    !check ||
-    !ts ||
-    !appname ||
-    !deviceUuid ||
-    !appSecret ||
-    !deviceSecret
-  ) {
+  if (!sign || !ts || !appname || !deviceUuid || !appSecret) {
     console.warn('Missing required fields or secrets');
     return false;
   }
@@ -76,42 +65,33 @@ export function isValidRequest(
 
     return false;
   }
-  const calculatedCheck = generateCheck(deviceUuid, ts, deviceSecret);
+
   const calculatedSign = generateSign(request, appname, appSecret, ts);
 
-  return calculatedCheck === check && calculatedSign === sign;
+  if (deviceSecret) {
+    if (!check) {
+      console.warn('Missing check field in request');
+      return false;
+    }
+    const calculatedCheck = generateCheck(deviceUuid, ts, deviceSecret);
+    return calculatedCheck === check && calculatedSign === sign;
+  }
+
+  // Device secret not provided, only validate sign
+  return calculatedSign === sign;
 }
 
-export function validateSignedRequest(request: Record<string, any>): void {
-  if (!isValidRequest(request, ELEVATOR_APP_SECRET, BIB_DEVICE_SECRET)) {
+export function validateSignedRequest(
+  request: Record<string, any>,
+  deviceSecret?: string,
+): void {
+  if (!isValidRequest(request, ELEVATOR_APP_SECRET, deviceSecret)) {
     throw new UnauthorizedException('Invalid sign or check');
   }
 }
 
-export function isValidRegisterRequest(request: Record<string, any>): boolean {
-  const { sign, ts, appname, deviceUuid, deviceMac } = request;
-
-  if (!sign || !ts || !appname || !deviceUuid || !deviceMac) {
-    console.warn('Missing fields in device register request');
-    return false;
+export function validateRegisterRequest(request: Record<string, any>): void {
+  if (!isValidRequest(request, ELEVATOR_APP_SECRET)) {
+    throw new UnauthorizedException('Invalid sign');
   }
-  if (appname !== ELEVATOR_APP_NAME) {
-    console.warn(`Blocked: appname '${appname}' is not allowed`);
-
-    console.log(
-      'EXPECTED APP_NAME HEX:',
-      Buffer.from(ELEVATOR_APP_NAME || '').toString('hex'),
-    );
-    console.log('RECEIVED appname HEX:', Buffer.from(appname).toString('hex'));
-
-    return false;
-  }
-  const calculatedSign = generateSign(
-    request,
-    appname,
-    ELEVATOR_APP_SECRET,
-    ts,
-  );
-
-  return calculatedSign === sign;
 }
