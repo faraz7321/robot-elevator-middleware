@@ -62,6 +62,21 @@ export class ElevatorController {
       throw new UnauthorizedException('Device not registered');
     }
     validateSignedRequest(request, deviceSecret);
+    // Ensure the device is bound to the requested lift before making the call
+    const isBound =
+      typeof (this.deviceService as any).isDeviceBoundToLift === 'function'
+        ? (this.deviceService as any).isDeviceBoundToLift(
+            request.deviceUuid,
+            request.liftNo,
+          )
+        : true;
+    if (!isBound) {
+      const errorRes = new CallElevatorResponseDTO();
+      errorRes.errcode = 1;
+      errorRes.errmsg = 'Device not bound to lift';
+      logOutgoing('robot /openapi/v5/lift/call', errorRes);
+      return errorRes;
+    }
     const response = await this.elevatorService.callElevator(request);
     logOutgoing('robot /openapi/v5/lift/call', response);
     return response;

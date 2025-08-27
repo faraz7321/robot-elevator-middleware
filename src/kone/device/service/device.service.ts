@@ -64,6 +64,14 @@ export class DeviceService {
     return this.deviceRegistry.get(deviceUuid)?.deviceSecret;
   }
 
+  /**
+   * Check if a device is bound to a specific lift number
+   */
+  isDeviceBoundToLift(deviceUuid: string, liftNo: number): boolean {
+    const bindings = this.deviceBindings.get(deviceUuid);
+    return bindings ? bindings.has(liftNo) : false;
+  }
+
   bindDevice(request: BindDeviceRequestDTO): BindDeviceResponseDTO {
     console.log(
       'Requested: /openapi/v5/device/binding on ' +

@@ -153,6 +153,7 @@ export class ElevatorService {
         CLOSED: 2,
       };
       const cache: { position?: LiftPositionDTO } = {};
+      let modeStr = 'UNKNOWN';
       let doorState = 0;
       let doorReceived = false;
 
@@ -177,6 +178,11 @@ export class ElevatorService {
             logIncoming('kone websocket monitor', msg);
             if (msg.subtopic === `lift_${request.liftNo}/position`) {
               cache.position = plainToInstance(LiftPositionDTO, msg.data);
+              // Some streams provide door state in position payload
+              if (typeof (msg.data?.door) !== 'undefined') {
+                doorState = msg.data.door ? 1 : 0;
+                doorReceived = true;
+              }
               checkComplete();
             } else if (msg.subtopic === `lift_${request.liftNo}/doors`) {
               const door = plainToInstance(LiftDoorDTO, msg.data);
@@ -187,6 +193,18 @@ export class ElevatorService {
                 doorState = mapped;
               }
               doorReceived = true;
+              checkComplete();
+            } else if (msg.callType === 'monitor-lift-position') {
+              cache.position = plainToInstance(LiftPositionDTO, msg.data);
+              if (typeof (msg.data?.door) !== 'undefined') {
+                doorState = msg.data.door ? 1 : 0;
+                doorReceived = true;
+              }
+              checkComplete();
+            } else if (msg.callType === 'monitor-lift-status') {
+              if (msg.data?.lift_mode) {
+                modeStr = String(msg.data.lift_mode);
+              }
               checkComplete();
             }
           } catch {
@@ -214,7 +232,7 @@ export class ElevatorService {
           state: moving,
           prevDirection: direction,
           liftDoorStatus: doorState,
-          mode: cache.position?.drive_mode || 'UNKNOWN',
+          mode: modeStr || cache.position?.drive_mode || 'UNKNOWN',
         },
       ];
       response.errcode = 0;
