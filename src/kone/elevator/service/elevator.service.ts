@@ -54,6 +54,7 @@ export class ElevatorService {
       topology = await fetchBuildingTopology(token, buildingId);
       this.buildingTopologyCache.set(buildingId, topology);
     }
+    console.log(topology);
     return topology;
   }
 
