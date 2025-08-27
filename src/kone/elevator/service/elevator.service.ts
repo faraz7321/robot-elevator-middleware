@@ -8,6 +8,8 @@ import { ReserveAndCancelRequestDTO } from '../dtos/reserve/ReserveAndCancelRequ
 import { ListElevatorsRequestDTO } from '../dtos/list/ListElevatorsRequestDTO';
 import { ListElevatorsResponseDTO } from '../dtos/list/ListElevatorsResponseDTO';
 import { CallElevatorResponseDTO } from '../dtos/call/CallElevatorResponseDTO';
+import { LiftPositionDTO } from '../dtos/monitor/LiftPositionDTO';
+import { LiftDoorDTO } from '../dtos/monitor/LiftDoorDTO';
 import {
   fetchBuildingTopology,
   openWebSocketConnection,
@@ -122,16 +124,16 @@ export class ElevatorService {
       const requestId = uuidv4();
       const monitorPayload = {
         type: 'site-monitoring',
-        buildingId,
         requestId,
+        buildingId,
         callType: 'monitor',
         groupId: targetGroupId,
         payload: {
           sub: `status-${Date.now()}`,
           duration: 30,
           subtopics: [
-            `lift_status/${request.liftNo}`,
-            `lift_position/${request.liftNo}`,
+            `lift_${request.liftNo}/position`,
+            `lift_${request.liftNo}/doors`,
           ],
         },
       };
@@ -144,14 +146,15 @@ export class ElevatorService {
         true,
       );
       logIncoming('kone websocket acknowledgement', ack);
-      logIncoming('kone websocket acknowledgement', ack);
-      const status: {
-        mode?: string;
-        floor?: number;
-        dir?: string;
-        moving_state?: string;
-        door?: boolean;
-      } = {};
+      const doorMap: Record<string, number> = {
+        OPENING: 1,
+        OPENED: 1,
+        CLOSING: 2,
+        CLOSED: 2,
+      };
+      const cache: { position?: LiftPositionDTO } = {};
+      let doorState = 0;
+      let doorReceived = false;
 
       await new Promise<void>((resolve) => {
         const timer = setTimeout(() => {
@@ -159,38 +162,32 @@ export class ElevatorService {
           resolve();
         }, 2000);
 
+        const checkComplete = () => {
+          if (cache.position && doorReceived) {
+            setTimeout(() => {
+              clearTimeout(timer);
+              webSocketConnection.close();
+              resolve();
+            }, 200);
+          }
+        };
         webSocketConnection.on('message', (data: string) => {
           try {
             const msg = JSON.parse(data);
             logIncoming('kone websocket monitor', msg);
-            if (
-              msg.callType === 'monitor-lift-status' ||
-              msg.topic?.startsWith('lift_status')
-            ) {
-              status.mode = msg.data?.lift_mode ?? msg.payload?.lift_mode;
-            }
-            if (
-              msg.callType === 'monitor-lift-position' ||
-              msg.callType === 'monitor-deck-position' ||
-              msg.topic?.startsWith('lift_position') ||
-              msg.topic?.startsWith('deck_position')
-            ) {
-              const d = msg.data || msg.payload || {};
-              status.floor = d.cur ?? status.floor;
-              status.dir = d.dir ?? status.dir;
-              status.moving_state = d.moving_state ?? status.moving_state;
-              status.door = typeof d.door === 'boolean' ? d.door : status.door;
-            }
-            if (
-              status.mode !== undefined &&
-              status.floor !== undefined &&
-              status.dir !== undefined &&
-              status.moving_state !== undefined &&
-              status.door !== undefined
-            ) {
-              clearTimeout(timer);
-              webSocketConnection.close();
-              resolve();
+            if (msg.subtopic === `lift_${request.liftNo}/position`) {
+              cache.position = plainToInstance(LiftPositionDTO, msg.data);
+              checkComplete();
+            } else if (msg.subtopic === `lift_${request.liftNo}/doors`) {
+              const door = plainToInstance(LiftDoorDTO, msg.data);
+              const mapped = doorMap[door.state] ?? 0;
+              if (mapped === 1) {
+                doorState = 1;
+              } else if (doorState === 0) {
+                doorState = mapped;
+              }
+              doorReceived = true;
+              checkComplete();
             }
           } catch {
             // ignore
@@ -206,15 +203,18 @@ export class ElevatorService {
         STOPPED: 0,
         STANDING: 0,
       };
+      const floor = cache.position?.cur ?? 0;
+      const direction = directionMap[cache.position?.dir || ''] ?? 0;
+      const moving = movingMap[cache.position?.moving_state || ''] ?? 0;
 
       response.result = [
         {
           liftNo: request.liftNo,
-          floor: status.floor ?? 0,
-          state: movingMap[status.moving_state || ''] ?? 0,
-          prevDirection: directionMap[status.dir || ''] ?? 0,
-          liftDoorStatus: status.door ? 1 : 0,
-          mode: status.mode ?? 'UNKNOWN',
+          floor,
+          state: moving,
+          prevDirection: direction,
+          liftDoorStatus: doorState,
+          mode: cache.position?.drive_mode || 'UNKNOWN',
         },
       ];
       response.errcode = 0;
@@ -324,10 +324,10 @@ export class ElevatorService {
         request_id: requestId,
         area: fromArea, //current floor
         time: new Date().toISOString(),
-        terminal: 1,
+        terminal: 1001,
         // terminal: 10011,
         call: {
-          action: 3,
+          action: 2,
           destination: toArea,
         },
       },
