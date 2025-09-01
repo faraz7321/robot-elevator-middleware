@@ -72,6 +72,14 @@ export class DeviceService {
     return bindings ? bindings.has(liftNo) : false;
   }
 
+  /**
+   * Get all lift numbers that the device is currently bound to
+   */
+  getBoundLiftsForDevice(deviceUuid: string): number[] {
+    const bindings = this.deviceBindings.get(deviceUuid);
+    return bindings ? Array.from(bindings) : [];
+  }
+
   bindDevice(request: BindDeviceRequestDTO): BindDeviceResponseDTO {
     console.log(
       'Requested: /openapi/v5/device/binding on ' +

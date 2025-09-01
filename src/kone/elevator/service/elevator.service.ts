@@ -17,6 +17,7 @@ import {
 } from '../../common/koneapi';
 import { plainToInstance } from 'class-transformer';
 import { AccessTokenService } from '../../auth/service/accessToken.service';
+import { DeviceService } from '../../device/service/device.service';
 import {
   BUILDING_ID_PREFIX,
   BuildingTopology,
@@ -32,13 +33,83 @@ import WebSocket from 'ws';
 
 @Injectable()
 export class ElevatorService {
-  constructor(private readonly accessTokenService: AccessTokenService) {}
+  constructor(
+    private readonly accessTokenService: AccessTokenService,
+    private readonly deviceService?: DeviceService,
+  ) {}
 
   private getRequestId() {
     return Math.floor(Math.random() * 1000000000);
   }
 
   private buildingTopologyCache: Map<string, BuildingTopology> = new Map();
+
+  // Cache of terminals per building/group: key -> Map(terminal_id -> type)
+  private terminalsCache: Map<string, Map<number, string>> = new Map();
+
+  private getTerminalMap(
+    buildingId: string,
+    groupId: string,
+    topology?: any,
+  ): Map<number, string> {
+    const key = `${buildingId}|${groupId}`;
+    let map = this.terminalsCache.get(key);
+    if (!map) {
+      map = new Map<number, string>();
+      // Prefer terminals from config topology event
+      const terminals = (topology as any)?.terminals || [];
+      if (Array.isArray(terminals)) {
+        for (const t of terminals) {
+          const id = Number(t?.terminal_id);
+          const type = String(t?.type || '').trim();
+          if (!isNaN(id) && type) map.set(id, type);
+        }
+      }
+      // Fallback: parse env JSON if provided
+      if (map.size === 0) {
+        const raw =
+          process.env.KONE_TERMINALS || process.env.ELEVATOR_TERMINALS || '[]';
+        try {
+          const arr = JSON.parse(raw);
+          if (Array.isArray(arr)) {
+            for (const t of arr) {
+              const id = Number(t?.terminal_id);
+              const type = String(t?.type || '').trim();
+              if (!isNaN(id) && type) map.set(id, type);
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+      this.terminalsCache.set(key, map);
+    }
+    return map;
+  }
+
+  private pickTerminalId(
+    buildingId: string,
+    groupId: string,
+    topology?: any,
+    groupTerminals?: number[],
+  ): number {
+    const map = this.getTerminalMap(buildingId, groupId, topology);
+    // Candidates with type 'virtual' (case-insensitive)
+    const virtualIds = Array.from(map.entries())
+      .filter(([, t]) => t.toLowerCase() === 'virtual')
+      .map(([id]) => id);
+    if (virtualIds.length === 0) {
+      return Number(process.env.KONE_DEFAULT_TERMINAL_ID || 1001);
+    }
+    const groupTermList: number[] = Array.isArray(groupTerminals)
+      ? groupTerminals
+      : (topology as any)?.groups?.[0]?.terminals || [];
+    if (Array.isArray(groupTermList) && groupTermList.length > 0) {
+      const match = virtualIds.find((id) => groupTermList.includes(id));
+      if (match) return match;
+    }
+    return virtualIds[0];
+  }
 
   private formatBuildingId(id: string): string {
     return id.startsWith(BUILDING_ID_PREFIX) ? id : `${BUILDING_ID_PREFIX}${id}`;
@@ -401,6 +472,44 @@ export class ElevatorService {
     const fromArea = areaMap.get(request.fromFloor) ?? request.fromFloor * 1000;
     const toArea = areaMap.get(request.toFloor) ?? request.toFloor * 1000;
 
+    // Determine allowed lifts (only those bound to the device)
+    const groups = topology.groups || [];
+    const groupObj =
+      groups.find((g: any) =>
+        String(g.groupId || '')
+          .split(':')
+          .pop()
+          ?.toString() === String(targetGroupId),
+      ) || groups[0];
+    const groupLiftNumbers: number[] = (groupObj?.lifts || [])
+      .map((l: any) => Number(String(l?.liftId || l?.lift_id).split(':').pop()))
+      .filter((n: any) => !isNaN(n));
+    const boundSet = new Set<number>(
+      (this.deviceService?.getBoundLiftsForDevice?.(request.deviceUuid) || [])
+        .map((n) => Number(n))
+        .filter((n) => !isNaN(n)),
+    );
+    let allowedLifts: number[] = groupLiftNumbers.filter((n) => boundSet.has(n));
+    if (allowedLifts.length === 0) {
+      // fallback to request.liftNo if nothing intersects or bindings unknown
+      if (
+        (this.deviceService?.isDeviceBoundToLift?.(
+          request.deviceUuid,
+          request.liftNo,
+        ) ?? true) || groupLiftNumbers.includes(request.liftNo)
+      ) {
+        allowedLifts = [request.liftNo];
+      }
+    }
+
+    // Select terminal from config (common-api config) with type 'Virtual'
+    const virtualTerminalId = this.pickTerminalId(
+      targetBuildingId,
+      targetGroupId,
+      topology,
+      (groupObj as any)?.terminals,
+    );
+
     // Open the WebSocket connection
       const webSocketConnection = await openWebSocketConnection(accessToken);
       // Heartbeat gate: ensure connection is healthy before sending action
@@ -443,10 +552,12 @@ export class ElevatorService {
         request_id: requestId,
         area: fromArea, //current floor
         time: new Date().toISOString(),
-        terminal: 1001,
+        terminal: virtualTerminalId,
+        
         // terminal: 10011,
         call: {
           action: 2,
+          //allowed_lifts: allowedLifts,
           destination: toArea,
         },
       },
