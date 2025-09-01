@@ -160,6 +160,8 @@ export class ElevatorService {
           subtopics: [
             `lift_${request.liftNo}/position`,
             `lift_${request.liftNo}/doors`,
+            // Subscribe to lift status updates to receive lift_mode
+            `lift_${request.liftNo}/status`,
           ],
         },
       };
@@ -219,6 +221,12 @@ export class ElevatorService {
                 doorState = mapped;
               }
               doorReceived = true;
+              checkComplete();
+            } else if (msg.subtopic === `lift_${request.liftNo}/status`) {
+              // Lift mode is provided here for site-monitoring 'lift-status'
+              if (msg.data?.lift_mode !== undefined && msg.data?.lift_mode !== null) {
+                modeStr = String(msg.data.lift_mode);
+              }
               checkComplete();
             } else if (msg.callType === 'monitor-lift-position') {
               cache.position = plainToInstance(LiftPositionDTO, msg.data);
