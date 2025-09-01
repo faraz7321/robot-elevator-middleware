@@ -39,22 +39,45 @@ export class ElevatorService {
 
   private buildingTopologyCache: Map<string, BuildingTopology> = new Map();
 
-  private formatBuildingId(placeId: string): string {
-    return placeId.startsWith(BUILDING_ID_PREFIX)
-      ? placeId
-      : `${BUILDING_ID_PREFIX}${placeId}`;
+  private formatBuildingId(id: string): string {
+    return id.startsWith(BUILDING_ID_PREFIX) ? id : `${BUILDING_ID_PREFIX}${id}`;
+  }
+
+  // Parses robot request placeId into KONE buildingId and groupId
+  // Accepts formats like:
+  // - "building:123456" (no group -> defaults to '1')
+  // - "building:123456:2" (explicit group)
+  // - "123456" (no prefix; no group)
+  // - "123456:2" (no prefix; explicit group)
+  private parsePlaceId(placeId: string): { buildingId: string; groupId: string } {
+    let buildingPart = placeId;
+    let groupId = '1';
+    const parts = String(placeId).split(':');
+    if (parts.length >= 2) {
+      const last = parts[parts.length - 1];
+      if (/^\d+$/.test(last)) {
+        groupId = last;
+        buildingPart = parts.slice(0, parts.length - 1).join(':');
+      }
+    }
+    const buildingId = this.formatBuildingId(buildingPart);
+    return { buildingId, groupId };
   }
 
   private async getBuildingTopology(
     buildingId: string,
+    groupId: string,
   ): Promise<BuildingTopology> {
-    let topology = this.buildingTopologyCache.get(buildingId);
+    const cacheKey = `${buildingId}|${groupId}`;
+    let topology = this.buildingTopologyCache.get(cacheKey);
     if (!topology) {
-      const token = await this.accessTokenService.getAccessToken(buildingId);
-      topology = await fetchBuildingTopology(token, buildingId);
-      this.buildingTopologyCache.set(buildingId, topology);
+      const token = await this.accessTokenService.getAccessToken(
+        buildingId,
+        groupId,
+      );
+      topology = await fetchBuildingTopology(token, buildingId, groupId);
+      this.buildingTopologyCache.set(cacheKey, topology);
     }
-    console.log(topology);
     return topology;
   }
 
@@ -63,8 +86,8 @@ export class ElevatorService {
   ): Promise<ListElevatorsResponseDTO> {
     const response = new ListElevatorsResponseDTO();
 
-    const buildingId = this.formatBuildingId(request.placeId);
-    const topology = await this.getBuildingTopology(buildingId);
+    const { buildingId, groupId } = this.parsePlaceId(request.placeId);
+    const topology = await this.getBuildingTopology(buildingId, groupId);
     const destinationNameMap = new Map<number, string>(
       (topology as any).destinations?.map((dest: any) => [
         dest.group_floor_id,
@@ -105,21 +128,23 @@ export class ElevatorService {
   async getLiftStatus(
     request: LiftStatusRequestDTO,
   ): Promise<LiftStatusResponseDTO> {
-    const buildingId = this.formatBuildingId(request.placeId);
-    const accessToken =
-      await this.accessTokenService.getAccessToken(buildingId);
+    const { buildingId, groupId } = this.parsePlaceId(request.placeId);
+    const accessToken = await this.accessTokenService.getAccessToken(
+      buildingId,
+      groupId,
+    );
     const response = new LiftStatusResponseDTO();
 
     try {
-      let topology = this.buildingTopologyCache.get(buildingId);
+      const cacheKey = `${buildingId}|${groupId}`;
+      let topology = this.buildingTopologyCache.get(cacheKey);
       if (!topology) {
-        logOutgoing('kone fetchBuildingConfig', { buildingId });
-        topology = await fetchBuildingTopology(accessToken, buildingId);
+        logOutgoing('kone fetchBuildingConfig', { buildingId, groupId });
+        topology = await fetchBuildingTopology(accessToken, buildingId, groupId);
         logIncoming('kone fetchBuildingConfig', topology);
-        this.buildingTopologyCache.set(buildingId, topology);
+        this.buildingTopologyCache.set(cacheKey, topology);
       }
-      const group = topology.groups?.[0];
-      const targetGroupId = group?.groupId?.split(':').pop() || '1';
+      const targetGroupId = groupId;
 
       const webSocketConnection = await openWebSocketConnection(accessToken);
       const requestId = uuidv4();
@@ -261,21 +286,33 @@ export class ElevatorService {
     request: CallElevatorRequestDTO,
   ): Promise<CallElevatorResponseDTO> {
     const requestId = this.getRequestId();
-    const targetBuildingId = this.formatBuildingId(request.placeId);
-    let topology = this.buildingTopologyCache.get(targetBuildingId);
-    if (!topology) {
-      const buildingToken =
-        await this.accessTokenService.getAccessToken(targetBuildingId);
-      logOutgoing('kone fetchBuildingConfig', { placeId: targetBuildingId });
-      topology = await fetchBuildingTopology(buildingToken, targetBuildingId);
-      logIncoming('kone fetchBuildingConfig', topology);
-      this.buildingTopologyCache.set(targetBuildingId, topology);
-    }
-    const accessToken = await this.accessTokenService.getAccessToken(
+    const { buildingId: targetBuildingId, groupId } = this.parsePlaceId(
       request.placeId,
     );
-    const targetGroupId =
-      topology.groups?.[0]?.groupId?.split(':').pop() || '1';
+    const cacheKey = `${targetBuildingId}|${groupId}`;
+    let topology = this.buildingTopologyCache.get(cacheKey);
+    if (!topology) {
+      const buildingToken = await this.accessTokenService.getAccessToken(
+        targetBuildingId,
+        groupId,
+      );
+      logOutgoing('kone fetchBuildingConfig', {
+        buildingId: targetBuildingId,
+        groupId,
+      });
+      topology = await fetchBuildingTopology(
+        buildingToken,
+        targetBuildingId,
+        groupId,
+      );
+      logIncoming('kone fetchBuildingConfig', topology);
+      this.buildingTopologyCache.set(cacheKey, topology);
+    }
+    const accessToken = await this.accessTokenService.getAccessToken(
+      targetBuildingId,
+      groupId,
+    );
+    const targetGroupId = groupId;
 
     // Check lift operational mode before sending call
     const liftStatus = await this.getLiftStatus(
@@ -388,19 +425,22 @@ export class ElevatorService {
     const response = new BaseResponseDTO();
     try {
       const requestId = this.getRequestId();
+      const { buildingId, groupId } = this.parsePlaceId(request.placeId);
       const accessToken = await this.accessTokenService.getAccessToken(
-        request.placeId,
+        buildingId,
+        groupId,
       );
 
-      let topology = this.buildingTopologyCache.get(request.placeId);
+      const cacheKey = `${buildingId}|${groupId}`;
+      let topology = this.buildingTopologyCache.get(cacheKey);
       if (!topology) {
-        logOutgoing('kone fetchBuildingConfig', { placeId: request.placeId });
-        topology = await fetchBuildingTopology(accessToken, request.placeId);
+        logOutgoing('kone fetchBuildingConfig', { buildingId, groupId });
+        topology = await fetchBuildingTopology(accessToken, buildingId, groupId);
         logIncoming('kone fetchBuildingConfig', topology);
-        this.buildingTopologyCache.set(request.placeId, topology);
+        this.buildingTopologyCache.set(cacheKey, topology);
       }
       const group = topology.groups?.[0];
-      const targetGroupId = group?.groupId?.split(':').pop() || '1';
+      const targetGroupId = groupId;
       const lift = group?.lifts.find(
         (l) => Number(l.liftId.split(':').pop()) === request.liftNo,
       );
@@ -410,7 +450,7 @@ export class ElevatorService {
       const webSocketConnection = await openWebSocketConnection(accessToken);
       const holdOpenPayload = {
         type: 'lift-call-api-v2',
-        buildingId: request.placeId,
+        buildingId,
         groupId: targetGroupId,
         callType: 'hold_open',
         payload: {
@@ -450,19 +490,22 @@ export class ElevatorService {
     const response = new BaseResponseDTO();
     try {
       const requestId = this.getRequestId();
+      const { buildingId, groupId } = this.parsePlaceId(request.placeId);
       const accessToken = await this.accessTokenService.getAccessToken(
-        request.placeId,
+        buildingId,
+        groupId,
       );
 
-      let topology = this.buildingTopologyCache.get(request.placeId);
+      const cacheKey = `${buildingId}|${groupId}`;
+      let topology = this.buildingTopologyCache.get(cacheKey);
       if (!topology) {
-        logOutgoing('kone fetchBuildingConfig', { placeId: request.placeId });
-        topology = await fetchBuildingTopology(accessToken, request.placeId);
+        logOutgoing('kone fetchBuildingConfig', { buildingId, groupId });
+        topology = await fetchBuildingTopology(accessToken, buildingId, groupId);
         logIncoming('kone fetchBuildingConfig', topology);
-        this.buildingTopologyCache.set(request.placeId, topology);
+        this.buildingTopologyCache.set(cacheKey, topology);
       }
       const group = topology.groups?.[0];
-      const targetGroupId = group?.groupId?.split(':').pop() || '1';
+      const targetGroupId = groupId;
       const lift = group?.lifts.find(
         (l) => Number(l.liftId.split(':').pop()) === request.liftNo,
       );
@@ -471,7 +514,7 @@ export class ElevatorService {
       const webSocketConnection = await openWebSocketConnection(accessToken);
       const actionPayload = {
         type: 'lift-call-api-v2',
-        buildingId: request.placeId,
+        buildingId,
         groupId: targetGroupId,
         callType: 'action',
         payload: {
