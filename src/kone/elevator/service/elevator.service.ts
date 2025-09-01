@@ -47,6 +47,16 @@ export class ElevatorService {
   // Cache of terminals per building/group: key -> Map(terminal_id -> type)
   private terminalsCache: Map<string, Map<number, string>> = new Map();
 
+  // In-memory rate limiting per deviceUuid for callElevator
+  private callRateLimit: Map<string, { count: number; windowStart: number }> =
+    new Map();
+
+  // Idempotency cache for callElevator per device+journey key
+  private callIdempotencyCache: Map<
+    string,
+    { expiresAt: number; response: CallElevatorResponseDTO }
+  > = new Map();
+
   private getTerminalMap(
     buildingId: string,
     groupId: string,
@@ -421,6 +431,37 @@ export class ElevatorService {
     const { buildingId: targetBuildingId, groupId } = this.parsePlaceId(
       request.placeId,
     );
+
+    // Idempotency check: if same device + journey within TTL, return cached response
+    const idempTtlMs = Number(
+      process.env.KONE_CALL_IDEMPOTENCY_TTL_MS || 10_000,
+    );
+    const journeyKey = `${request.deviceUuid}|${targetBuildingId}|${groupId}|${request.fromFloor}|${request.toFloor}`;
+    const cached = this.callIdempotencyCache.get(journeyKey);
+    if (cached && Date.now() < cached.expiresAt) {
+      return plainToInstance(CallElevatorResponseDTO, cached.response);
+    }
+
+    // Rate limiting per deviceUuid
+    const windowMs = Number(process.env.KONE_CALL_RATE_WINDOW_MS || 10_000);
+    const maxReq = Number(process.env.KONE_CALL_RATE_MAX_REQUESTS || 5);
+    const rl = this.callRateLimit.get(request.deviceUuid) || {
+      count: 0,
+      windowStart: Date.now(),
+    };
+    const now = Date.now();
+    if (now - rl.windowStart > windowMs) {
+      rl.windowStart = now;
+      rl.count = 0;
+    }
+    if (rl.count >= maxReq) {
+      const limited = new CallElevatorResponseDTO();
+      limited.errcode = 1;
+      limited.errmsg = 'RATE_LIMITED';
+      return limited;
+    }
+    rl.count += 1;
+    this.callRateLimit.set(request.deviceUuid, rl);
     const cacheKey = `${targetBuildingId}|${groupId}`;
     let topology = this.buildingTopologyCache.get(cacheKey);
     if (!topology) {
@@ -588,7 +629,13 @@ export class ElevatorService {
     response.connectionId = wsResponse.connectionId;
     response.requestId = Number(wsResponse.requestId);
     response.statusCode = wsResponse.statusCode;
-
+    // Cache successful journey result for idempotency window
+    if (response.errcode === 0) {
+      this.callIdempotencyCache.set(journeyKey, {
+        expiresAt: Date.now() + idempTtlMs,
+        response: plainToInstance(CallElevatorResponseDTO, response),
+      });
+    }
     return plainToInstance(CallElevatorResponseDTO, response);
   }
 

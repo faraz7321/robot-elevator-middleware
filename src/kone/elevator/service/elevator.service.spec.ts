@@ -113,6 +113,132 @@ describe('ElevatorService callElevator', () => {
     expect(res.errcode).toBe(1);
     expect(res.errmsg).toContain('FRD');
   });
+
+  it('places a single action call to the correct group suffix', async () => {
+    // Topology with two groups; target group suffix is 2
+    (fetchBuildingTopology as jest.Mock).mockResolvedValueOnce({
+      groups: [
+        { groupId: 'gid:1', lifts: [] },
+        { groupId: 'gid:2', lifts: [], terminals: [1111] },
+      ],
+      areas: [],
+    });
+
+    const req = new CallElevatorRequestDTO();
+    req.placeId = 'b1:2'; // group suffix 2
+    req.liftNo = 1;
+    req.fromFloor = 3;
+    req.toFloor = 6;
+
+    const res = await service.callElevator(req);
+
+    expect(res.errcode).toBe(0);
+
+    const wsMock = openWebSocketConnection as jest.Mock;
+    const ws = wsMock.mock.results[wsMock.mock.results.length - 1].value;
+    const payloads = ws.send.mock.calls.map((c) => JSON.parse(c[0]));
+    const actionPayloads = payloads.filter((p) => p.callType === 'action');
+
+    // Only one action for the journey and to the correct group
+    expect(actionPayloads).toHaveLength(1);
+    expect(actionPayloads[0].groupId).toBe('2');
+    expect(actionPayloads[0].buildingId).toBe('building:b1');
+  });
+
+  it('returns cached response and avoids duplicate action for same journey quickly repeated', async () => {
+    // Configure permissive rate limit to not interfere with idempotency
+    const prevWindow = process.env.KONE_CALL_RATE_WINDOW_MS;
+    const prevMax = process.env.KONE_CALL_RATE_MAX_REQUESTS;
+    const prevTtl = process.env.KONE_CALL_IDEMPOTENCY_TTL_MS;
+    process.env.KONE_CALL_RATE_WINDOW_MS = '1000';
+    process.env.KONE_CALL_RATE_MAX_REQUESTS = '10';
+    process.env.KONE_CALL_IDEMPOTENCY_TTL_MS = '5000';
+
+    try {
+      (fetchBuildingTopology as jest.Mock).mockResolvedValueOnce({
+        groups: [{ groupId: 'gid:1', lifts: [] }],
+        areas: [],
+      });
+
+      const req = new CallElevatorRequestDTO();
+      req.placeId = 'b1:1';
+      req.liftNo = 1;
+      req.fromFloor = 4;
+      req.toFloor = 8;
+      req.deviceUuid = 'aaaaaaaaaaaaaaaaaaaaaaaa';
+      req.appname = 'app';
+      req.sign = 's';
+      req.check = 'c';
+      req.ts = Date.now();
+
+      const first = await service.callElevator(req);
+      expect(first.errcode).toBe(0);
+
+      const wsMock = openWebSocketConnection as jest.Mock;
+      const ws = wsMock.mock.results[wsMock.mock.results.length - 1].value;
+      const sendsAfterFirst = ws.send.mock.calls.length;
+
+      const second = await service.callElevator(req);
+      expect(second.errcode).toBe(0);
+      // No additional sends should occur for duplicate within TTL
+      expect(ws.send.mock.calls.length).toBe(sendsAfterFirst);
+    } finally {
+      if (typeof prevWindow !== 'undefined')
+        process.env.KONE_CALL_RATE_WINDOW_MS = prevWindow;
+      else delete process.env.KONE_CALL_RATE_WINDOW_MS;
+      if (typeof prevMax !== 'undefined')
+        process.env.KONE_CALL_RATE_MAX_REQUESTS = prevMax;
+      else delete process.env.KONE_CALL_RATE_MAX_REQUESTS;
+      if (typeof prevTtl !== 'undefined')
+        process.env.KONE_CALL_IDEMPOTENCY_TTL_MS = prevTtl;
+      else delete process.env.KONE_CALL_IDEMPOTENCY_TTL_MS;
+    }
+  });
+
+  it('rate limits distinct journeys from same device within window', async () => {
+    const prevWindow = process.env.KONE_CALL_RATE_WINDOW_MS;
+    const prevMax = process.env.KONE_CALL_RATE_MAX_REQUESTS;
+    process.env.KONE_CALL_RATE_WINDOW_MS = '10000';
+    process.env.KONE_CALL_RATE_MAX_REQUESTS = '1';
+
+    try {
+      (fetchBuildingTopology as jest.Mock).mockResolvedValue({
+        groups: [{ groupId: 'gid:1', lifts: [] }],
+        areas: [],
+      });
+
+      const base = new CallElevatorRequestDTO();
+      base.placeId = 'b1:1';
+      base.liftNo = 1;
+      base.fromFloor = 1;
+      base.deviceUuid = 'bbbbbbbbbbbbbbbbbbbbbbbb';
+      base.appname = 'app';
+      base.sign = 's';
+      base.check = 'c';
+      base.ts = Date.now();
+
+      const req1 = Object.assign(new CallElevatorRequestDTO(), base, {
+        toFloor: 2,
+      });
+      const req2 = Object.assign(new CallElevatorRequestDTO(), base, {
+        toFloor: 3,
+      });
+
+      const res1 = await service.callElevator(req1);
+      expect(res1.errcode).toBe(0);
+
+      const res2 = await service.callElevator(req2);
+      expect(res2.errcode).toBe(1);
+      expect(res2.errmsg).toBe('RATE_LIMITED');
+    } finally {
+      if (typeof prevWindow !== 'undefined')
+        process.env.KONE_CALL_RATE_WINDOW_MS = prevWindow;
+      else delete process.env.KONE_CALL_RATE_WINDOW_MS;
+      if (typeof prevMax !== 'undefined')
+        process.env.KONE_CALL_RATE_MAX_REQUESTS = prevMax;
+      else delete process.env.KONE_CALL_RATE_MAX_REQUESTS;
+    }
+  });
 });
 
 describe('ElevatorService getLiftStatus', () => {
