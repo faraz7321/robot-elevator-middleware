@@ -47,6 +47,32 @@ export class ElevatorService {
   // Cache of terminals per building/group: key -> Map(terminal_id -> type)
   private terminalsCache: Map<string, Map<number, string>> = new Map();
 
+  // Cache floor/area mappings per building/group
+  private floorAreaCache: Map<
+    string,
+    {
+      byFloor: Map<
+        number,
+        Array<{
+          areaId: number;
+          shortName: string;
+          groupSide?: number;
+          terminals: number[];
+        }>
+      >;
+      byArea: Map<
+        number,
+        {
+          floor: number;
+          shortName: string;
+          groupSide?: number;
+          terminals: number[];
+        }
+      >;
+      groupTerminals: number[];
+    }
+  > = new Map();
+
   // In-memory rate limiting per deviceUuid for callElevator
   private callRateLimit: Map<string, { count: number; windowStart: number }> =
     new Map();
@@ -123,6 +149,105 @@ export class ElevatorService {
 
   private formatBuildingId(id: string): string {
     return id.startsWith(BUILDING_ID_PREFIX) ? id : `${BUILDING_ID_PREFIX}${id}`;
+  }
+
+  private buildFloorAreaMappings(
+    buildingId: string,
+    groupId: string,
+    topology: any,
+  ) {
+    const key = `${buildingId}|${groupId}`;
+    let entry = this.floorAreaCache.get(key);
+    if (entry) return entry;
+
+    const byFloor = new Map<
+      number,
+      Array<{ areaId: number; shortName: string; groupSide?: number; terminals: number[] }>
+    >();
+    const byArea = new Map<
+      number,
+      { floor: number; shortName: string; groupSide?: number; terminals: number[] }
+    >();
+
+    const parseFloorNum = (name: any): number => {
+      const m = String(name ?? '').match(/-?\d+/);
+      return m ? parseInt(m[0], 10) : NaN;
+    };
+
+    const group = (topology?.groups || []).find((g: any) =>
+      String(g?.groupId || g?.group_id || '')
+        .split(':')
+        .pop()
+        ?.toString() === String(groupId),
+    ) || topology?.groups?.[0];
+    const groupTerminals: number[] = Array.isArray(group?.terminals)
+      ? group.terminals.map((n: any) => Number(n)).filter((n: any) => !isNaN(n))
+      : [];
+
+    const pushEntry = (
+      floor: number,
+      areaId: number,
+      shortName: string,
+      groupSide?: number,
+      terminals: number[] = [],
+    ) => {
+      if (isNaN(floor) || isNaN(areaId)) return;
+      const arr = byFloor.get(floor) || [];
+      const e = { areaId, shortName, groupSide, terminals };
+      arr.push(e);
+      byFloor.set(floor, arr);
+      byArea.set(areaId, { floor, shortName, groupSide, terminals });
+    };
+
+    if (Array.isArray(topology?.destinations) && topology.destinations.length) {
+      for (const d of topology.destinations) {
+        const floor = parseFloorNum(d?.short_name);
+        const areaId = Number(
+          typeof d?.area_id === 'number'
+            ? d.area_id
+            : String(d?.area_id || '').split(':').pop(),
+        );
+        const side =
+          typeof d?.group_side === 'number' ? Number(d.group_side) : undefined;
+        const terms: number[] = Array.isArray(d?.terminals)
+          ? d.terminals.map((t: any) => Number(t)).filter((n: any) => !isNaN(n))
+          : [];
+        pushEntry(floor, areaId, String(d?.short_name ?? ''), side, terms);
+      }
+    }
+
+    if (!byFloor.size && Array.isArray(topology?.areas)) {
+      for (const a of topology.areas) {
+        const floor = parseFloorNum(a?.shortName);
+        const areaId = Number(String(a?.areaId || '').split(':').pop());
+        pushEntry(floor, areaId, String(a?.shortName ?? ''));
+      }
+    }
+
+    entry = { byFloor, byArea, groupTerminals };
+    this.floorAreaCache.set(key, entry);
+    return entry;
+  }
+
+  private resolveAreaIdForFloor(
+    buildingId: string,
+    groupId: string,
+    topology: any,
+    floor: number,
+    preferredTerminalId?: number,
+  ): number {
+    const mapping = this.buildFloorAreaMappings(buildingId, groupId, topology);
+    const candidates = mapping.byFloor.get(floor);
+    if (Array.isArray(candidates) && candidates.length) {
+      if (preferredTerminalId) {
+        const match = candidates.find((c) =>
+          Array.isArray(c.terminals) && c.terminals.includes(preferredTerminalId),
+        );
+        if (match) return match.areaId;
+      }
+      return candidates[0].areaId;
+    }
+    return floor * 1000;
   }
 
   // Parses robot request placeId into KONE buildingId and groupId
@@ -542,19 +667,6 @@ export class ElevatorService {
         targetGroupId,
       );
 
-    // Map human-readable floor numbers to KONE area identifiers
-    const areaMap = new Map<number, number>();
-    topology.areas?.forEach((area) => {
-      const floorNum = parseInt(String(area.shortName).replace(/\D/g, ''), 10);
-      const areaIdNum = Number(area.areaId.split(':').pop());
-      if (!isNaN(floorNum) && !isNaN(areaIdNum)) {
-        areaMap.set(floorNum, areaIdNum);
-      }
-    });
-
-    const fromArea = areaMap.get(request.fromFloor) ?? request.fromFloor * 1000;
-    const toArea = areaMap.get(request.toFloor) ?? request.toFloor * 1000;
-
     // Determine allowed lifts (only those bound to the device)
     const groups = topology.groups || [];
     const groupObj =
@@ -592,6 +704,32 @@ export class ElevatorService {
       topology,
       (groupObj as any)?.terminals,
     );
+
+    // Resolve areas using robust per-group mapping
+    const fromArea = this.resolveAreaIdForFloor(
+      targetBuildingId,
+      targetGroupId,
+      topology,
+      request.fromFloor,
+      virtualTerminalId,
+    );
+    const toArea = this.resolveAreaIdForFloor(
+      targetBuildingId,
+      targetGroupId,
+      topology,
+      request.toFloor,
+      virtualTerminalId,
+    );
+
+    logOutgoing('kone floor->area mapping', {
+      buildingId: targetBuildingId,
+      groupId: targetGroupId,
+      fromFloor: request.fromFloor,
+      toFloor: request.toFloor,
+      fromArea,
+      toArea,
+      terminal: virtualTerminalId,
+    });
 
       // Use the same WebSocket connection for the action
       logIncoming('kone websocket', { event: 'open' });

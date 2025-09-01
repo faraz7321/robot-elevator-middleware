@@ -12,6 +12,7 @@ jest.mock('../../common/koneapi', () => ({
   fetchBuildingTopology: jest.fn(),
   openWebSocketConnection: jest.fn(),
   waitForResponse: jest.fn(),
+  fetchLimitedAccessToken: jest.fn().mockResolvedValue('limited-token'),
 }));
 
 describe('ElevatorService callElevator', () => {
