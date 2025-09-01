@@ -43,12 +43,17 @@ describe('ElevatorService callElevator', () => {
       const ws: {
         handler?: (data: string) => void;
         on: (event: string, cb: (data: string) => void) => void;
+        prependListener: (event: string, cb: (data: string) => void) => void;
         off: (event: string, cb: (data: string) => void) => void;
         send: jest.Mock;
         close: jest.Mock;
       } = {
         handler: undefined,
         on: (event, cb) => {
+          if (event === 'message') ws.handler = cb;
+        },
+        prependListener: (event, cb) => {
+          // For tests, treat prependListener same as on
           if (event === 'message') ws.handler = cb;
         },
         off: (event, cb) => {
@@ -59,6 +64,13 @@ describe('ElevatorService callElevator', () => {
         send: jest.fn((payload) => {
           try {
             const parsed = JSON.parse(payload as string);
+            if (parsed?.callType === 'ping') {
+              const res = {
+                callType: 'ping',
+                data: { request_id: parsed?.payload?.request_id },
+              };
+              setTimeout(() => ws.handler?.(JSON.stringify(res)), 0);
+            }
             if (parsed?.callType === 'action') {
               const res = {
                 callType: 'action',
@@ -98,10 +110,11 @@ describe('ElevatorService callElevator', () => {
     expect(sent.payload.call.destination).toBe(5000);
   });
 
-  it('rejects call when in non-operational mode', async () => {
-    getLiftStatusMock.mockResolvedValue({
-      result: [{ mode: 'FRD' }],
-    });
+  it('does not depend on operational mode check in call flow', async () => {
+    // Even if a separate status endpoint might report non-operational,
+    // callElevator only pings and proceeds with the call on its own WS.
+    getLiftStatusMock.mockResolvedValue({ result: [{ mode: 'FRD' }] });
+
     const req = new CallElevatorRequestDTO();
     req.placeId = 'b1';
     req.liftNo = 1;
@@ -110,8 +123,9 @@ describe('ElevatorService callElevator', () => {
 
     const res = await service.callElevator(req);
 
-    expect(res.errcode).toBe(1);
-    expect(res.errmsg).toContain('FRD');
+    expect(res.errcode).toBe(0);
+    // Ensure callElevator did not invoke getLiftStatus internally
+    expect(getLiftStatusMock).not.toHaveBeenCalled();
   });
 
   it('places a single action call to the correct group suffix', async () => {
@@ -258,12 +272,16 @@ describe('ElevatorService getLiftStatus', () => {
       const ws: {
         handler?: (data: string) => void;
         on: (event: string, cb: (data: string) => void) => void;
+        prependListener: (event: string, cb: (data: string) => void) => void;
         off: (event: string, cb: (data: string) => void) => void;
         send: jest.Mock;
         close: jest.Mock;
       } = {
         handler: undefined,
         on: (event, cb) => {
+          if (event === 'message') ws.handler = cb;
+        },
+        prependListener: (event, cb) => {
           if (event === 'message') ws.handler = cb;
         },
         off: (event, cb) => {
@@ -274,6 +292,13 @@ describe('ElevatorService getLiftStatus', () => {
         send: jest.fn((payload) => {
           try {
             const parsed = JSON.parse(payload as string);
+            if (parsed?.callType === 'ping') {
+              const res = {
+                callType: 'ping',
+                data: { request_id: parsed?.payload?.request_id },
+              };
+              setTimeout(() => ws.handler?.(JSON.stringify(res)), 0);
+            }
             if (parsed?.callType === 'monitor') {
               setTimeout(() => {
                 ws.handler?.(
@@ -298,6 +323,7 @@ describe('ElevatorService getLiftStatus', () => {
           } catch {
             // no-op
           }
+          return payload;
         }),
         close: jest.fn(),
       };

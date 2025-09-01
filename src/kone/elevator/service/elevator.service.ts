@@ -154,6 +154,9 @@ export class ElevatorService {
   ): Promise<void> {
     const maxWaitMs = Number(process.env.KONE_HEARTBEAT_TIMEOUT_MS || 30000);
     const intervalMs = Number(process.env.KONE_HEARTBEAT_INTERVAL_MS || 1000);
+    const pingEventTimeoutMs = Number(
+      process.env.KONE_HEARTBEAT_PING_EVENT_TIMEOUT_MS || 5000,
+    );
     const started = Date.now();
 
     while (true) {
@@ -172,16 +175,45 @@ export class ElevatorService {
       } as const;
 
       try {
+        // Prepare listener for the ping event before sending
+        const pingEventPromise: Promise<void> = new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            webSocketConnection.off('message', onMessage);
+            reject(new Error('Ping event timeout'));
+          }, pingEventTimeoutMs);
+
+          const onMessage = (data: string) => {
+            try {
+              const msg = JSON.parse(data);
+              if (
+                msg?.callType === 'ping' &&
+                String(msg?.data?.request_id) === String(requestId)
+              ) {
+                clearTimeout(timer);
+                webSocketConnection.off('message', onMessage);
+                logIncoming('kone websocket ping', msg);
+                resolve();
+              }
+            } catch {
+              // ignore non-JSON
+            }
+          };
+          // Ensure we see the event even if other listeners are added later
+          webSocketConnection.prependListener('message', onMessage);
+        });
+
         logOutgoing('kone websocket ping', payload);
         webSocketConnection.send(JSON.stringify(payload));
+
         const res = await waitForResponse(
           webSocketConnection,
           String(requestId),
           5,
           true,
         );
-        logIncoming('kone websocket ping', res);
-        // Treat any 'ok' (typically 200/201) as healthy
+        logIncoming('kone websocket acknowledgement', res);
+        // Wait for the ping event to arrive before proceeding
+        await pingEventPromise;
         return;
       } catch (err: any) {
         const code = err?.statusCode ?? err?.code;
@@ -257,8 +289,10 @@ export class ElevatorService {
   }
 
   // Fetch lift status via WebSocket API
+  // Optionally reuse an existing WebSocket connection (do not close it)
   async getLiftStatus(
     request: LiftStatusRequestDTO,
+    existingConnection?: WebSocket,
   ): Promise<LiftStatusResponseDTO> {
     const { buildingId, groupId } = this.parsePlaceId(request.placeId);
     const accessToken = await this.accessTokenService.getAccessToken(
@@ -277,10 +311,14 @@ export class ElevatorService {
         this.buildingTopologyCache.set(cacheKey, topology);
       }
       const targetGroupId = groupId;
-
-      const webSocketConnection = await openWebSocketConnection(accessToken);
+      const webSocketConnection =
+        existingConnection || (await openWebSocketConnection(accessToken));
       // Heartbeat gate: ensure connection is healthy before subscribing
-      await this.ensureHeartbeat(webSocketConnection as unknown as WebSocket, buildingId, groupId);
+      await this.ensureHeartbeat(
+        webSocketConnection as unknown as WebSocket,
+        buildingId,
+        groupId,
+      );
       const requestId = uuidv4();
       const monitorPayload = {
         type: 'site-monitoring',
@@ -320,8 +358,10 @@ export class ElevatorService {
       let doorReceived = false;
 
       await new Promise<void>((resolve) => {
+        const shouldClose = !existingConnection;
         const timer = setTimeout(() => {
-          webSocketConnection.close();
+          if (shouldClose) webSocketConnection.close();
+          webSocketConnection.off('message', onMessage);
           resolve();
         }, 2000);
 
@@ -329,14 +369,19 @@ export class ElevatorService {
           if (cache.position && doorReceived) {
             setTimeout(() => {
               clearTimeout(timer);
-              webSocketConnection.close();
+              if (shouldClose) webSocketConnection.close();
+              webSocketConnection.off('message', onMessage);
               resolve();
             }, 200);
           }
         };
-        webSocketConnection.on('message', (data: string) => {
+        const onMessage = (data: string) => {
           try {
             const msg = JSON.parse(data);
+            if (msg?.callType === 'ping') {
+              // Ignore ping events here to avoid mislabeling as monitor
+              return;
+            }
             logIncoming('kone websocket monitor', msg);
             if (msg.subtopic === `lift_${request.liftNo}/position`) {
               cache.position = plainToInstance(LiftPositionDTO, msg.data);
@@ -378,7 +423,8 @@ export class ElevatorService {
           } catch {
             // ignore
           }
-        });
+        };
+        webSocketConnection.on('message', onMessage);
       });
 
       const directionMap: Record<string, number> = { UP: 1, DOWN: 2 };
@@ -487,18 +533,14 @@ export class ElevatorService {
     );
     const targetGroupId = groupId;
 
-    // Check lift operational mode before sending call
-    const liftStatus = await this.getLiftStatus(
-      request as unknown as LiftStatusRequestDTO,
-    );
-    const mode = liftStatus.result?.[0]?.mode;
-    const NON_OPERATIONAL_MODES = ['FRD', 'OSS', 'ATS', 'PRC'];
-    if (mode && NON_OPERATIONAL_MODES.includes(String(mode))) {
-      const res = new CallElevatorResponseDTO();
-      res.errcode = 1;
-      res.errmsg = `Lift in ${mode} mode`;
-      return res;
-    }
+    // Open a WebSocket for this endpoint, ping using the same connection
+    const webSocketConnection = await openWebSocketConnection(accessToken);
+    try {
+      await this.ensureHeartbeat(
+        webSocketConnection as unknown as WebSocket,
+        targetBuildingId,
+        targetGroupId,
+      );
 
     // Map human-readable floor numbers to KONE area identifiers
     const areaMap = new Map<number, number>();
@@ -551,10 +593,7 @@ export class ElevatorService {
       (groupObj as any)?.terminals,
     );
 
-    // Open the WebSocket connection
-      const webSocketConnection = await openWebSocketConnection(accessToken);
-      // Heartbeat gate: ensure connection is healthy before sending action
-      await this.ensureHeartbeat(webSocketConnection as unknown as WebSocket, targetBuildingId, targetGroupId);
+      // Use the same WebSocket connection for the action
       logIncoming('kone websocket', { event: 'open' });
 
     type CallEvent = {
@@ -567,7 +606,16 @@ export class ElevatorService {
       const onMessage = (data: string) => {
         try {
           const parsed = JSON.parse(data) as CallEvent;
-          logIncoming('kone websocket action', parsed);
+          const callType = (parsed as any)?.callType;
+          const msgType = (parsed as any)?.type;
+          // Only log known callType events; ignore pure response (ok/error) here
+          if (callType === 'ping') {
+            logIncoming('kone websocket ping', parsed);
+          } else if (callType === 'action') {
+            logIncoming('kone websocket action', parsed);
+          } else if (msgType === 'ok' || msgType === 'error') {
+            // ack is logged elsewhere; skip duplicate logging here
+          }
           if (
             parsed.callType === 'action' &&
             parsed.data?.request_id === requestId
@@ -608,13 +656,18 @@ export class ElevatorService {
     // Send the request
     webSocketConnection.send(JSON.stringify(destinationCallPayload));
 
-    // Wait for both acknowledgement and call event
-    const [wsResponse, callEvent]: [WebSocketResponse, CallEvent] =
-      await Promise.all([
-        waitForResponse(webSocketConnection, String(requestId), 10, true),
-        callEventPromise,
-      ]);
-    logIncoming('kone websocket acknowledgement', wsResponse);
+    // Wait for ack and call event concurrently, but log ack immediately when it arrives
+    const ackPromise = waitForResponse(
+      webSocketConnection,
+      String(requestId),
+      10,
+      true,
+    ).then((ack) => {
+      logIncoming('kone websocket acknowledgement', ack);
+      return ack;
+    });
+    const callEvent = await callEventPromise;
+    const wsResponse = await ackPromise;
 
     const response = new CallElevatorResponseDTO();
     if (callEvent.data?.success) {
@@ -636,7 +689,12 @@ export class ElevatorService {
         response: plainToInstance(CallElevatorResponseDTO, response),
       });
     }
-    return plainToInstance(CallElevatorResponseDTO, response);
+      return plainToInstance(CallElevatorResponseDTO, response);
+    } finally {
+      try {
+        webSocketConnection.close();
+      } catch {}
+    }
   }
 
   // Delay opening of elevator doors
