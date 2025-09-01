@@ -556,7 +556,7 @@ export class ElevatorService {
         
         // terminal: 10011,
         call: {
-          action: 2,
+          action: 3,
           //allowed_lifts: allowedLifts,
           destination: toArea,
         },
