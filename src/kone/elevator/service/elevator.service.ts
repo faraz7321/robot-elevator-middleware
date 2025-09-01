@@ -24,6 +24,7 @@ import {
 } from '../../common/types';
 import { logIncoming, logOutgoing } from '../../common/logger';
 import { v4 as uuidv4 } from 'uuid';
+import WebSocket from 'ws';
 
 /**
  * Update these two variables with your own credentials or set them up as environment variables.
@@ -62,6 +63,56 @@ export class ElevatorService {
     }
     const buildingId = this.formatBuildingId(buildingPart);
     return { buildingId, groupId };
+  }
+
+  // Ensure elevator heartbeat before proceeding with any WebSocket action
+  private async ensureHeartbeat(
+    webSocketConnection: WebSocket,
+    buildingId: string,
+    groupId: string,
+  ): Promise<void> {
+    const maxWaitMs = Number(process.env.KONE_HEARTBEAT_TIMEOUT_MS || 30000);
+    const intervalMs = Number(process.env.KONE_HEARTBEAT_INTERVAL_MS || 1000);
+    const started = Date.now();
+
+    while (true) {
+      const elapsed = Date.now() - started;
+      if (elapsed > maxWaitMs) {
+        throw new Error('Heartbeat check timed out');
+      }
+
+      const requestId = this.getRequestId();
+      const payload = {
+        type: 'common-api',
+        buildingId,
+        callType: 'ping',
+        payload: { request_id: requestId },
+        groupId,
+      } as const;
+
+      try {
+        logOutgoing('kone websocket ping', payload);
+        webSocketConnection.send(JSON.stringify(payload));
+        const res = await waitForResponse(
+          webSocketConnection,
+          String(requestId),
+          5,
+          true,
+        );
+        logIncoming('kone websocket ping', res);
+        // Treat any 'ok' (typically 200/201) as healthy
+        return;
+      } catch (err: any) {
+        const code = err?.statusCode ?? err?.code;
+        // Keep pinging on end-to-end comms error (1005) or timeouts
+        if (code === 1005 || /timeout/i.test(String(err?.message || ''))) {
+          await new Promise((r) => setTimeout(r, intervalMs));
+          continue;
+        }
+        // Other errors are considered fatal for heartbeat
+        throw err instanceof Error ? err : new Error(String(err));
+      }
+    }
   }
 
   private async getBuildingTopology(
@@ -147,6 +198,8 @@ export class ElevatorService {
       const targetGroupId = groupId;
 
       const webSocketConnection = await openWebSocketConnection(accessToken);
+      // Heartbeat gate: ensure connection is healthy before subscribing
+      await this.ensureHeartbeat(webSocketConnection as unknown as WebSocket, buildingId, groupId);
       const requestId = uuidv4();
       const monitorPayload = {
         type: 'site-monitoring',
@@ -349,8 +402,10 @@ export class ElevatorService {
     const toArea = areaMap.get(request.toFloor) ?? request.toFloor * 1000;
 
     // Open the WebSocket connection
-    const webSocketConnection = await openWebSocketConnection(accessToken);
-    logIncoming('kone websocket', { event: 'open' });
+      const webSocketConnection = await openWebSocketConnection(accessToken);
+      // Heartbeat gate: ensure connection is healthy before sending action
+      await this.ensureHeartbeat(webSocketConnection as unknown as WebSocket, targetBuildingId, targetGroupId);
+      logIncoming('kone websocket', { event: 'open' });
 
     type CallEvent = {
       callType: string;
@@ -456,6 +511,8 @@ export class ElevatorService {
       const servedArea = deck?.areasServed?.[0] || 0;
 
       const webSocketConnection = await openWebSocketConnection(accessToken);
+      // Heartbeat gate: ensure connection is healthy before sending hold_open
+      await this.ensureHeartbeat(webSocketConnection as unknown as WebSocket, buildingId, targetGroupId);
       const holdOpenPayload = {
         type: 'lift-call-api-v2',
         buildingId,
@@ -520,6 +577,8 @@ export class ElevatorService {
       const area = lift?.floors?.[0]?.areasServed?.[0] || 0;
 
       const webSocketConnection = await openWebSocketConnection(accessToken);
+      // Heartbeat gate: ensure connection is healthy before sending action
+      await this.ensureHeartbeat(webSocketConnection as unknown as WebSocket, buildingId, targetGroupId);
       const actionPayload = {
         type: 'lift-call-api-v2',
         buildingId,

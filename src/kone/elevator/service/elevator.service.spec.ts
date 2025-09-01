@@ -57,11 +57,18 @@ describe('ElevatorService callElevator', () => {
           }
         },
         send: jest.fn((payload) => {
-          const res = {
-            callType: 'action',
-            data: { request_id: 123, success: true, session_id: 99 },
-          };
-          ws.handler?.(JSON.stringify(res));
+          try {
+            const parsed = JSON.parse(payload as string);
+            if (parsed?.callType === 'action') {
+              const res = {
+                callType: 'action',
+                data: { request_id: 123, success: true, session_id: 99 },
+              };
+              ws.handler?.(JSON.stringify(res));
+            }
+          } catch {
+            // no-op
+          }
           return payload;
         }),
         close: jest.fn(),
@@ -85,7 +92,7 @@ describe('ElevatorService callElevator', () => {
     expect(res.connectionId).toBe('conn-123');
     expect(res.requestId).toBe(123);
     const sendArg = (openWebSocketConnection as jest.Mock).mock.results[0].value
-      .send.mock.calls[0][0];
+      .send.mock.calls[1][0];
     const sent = JSON.parse(sendArg);
     expect(sent.payload.area).toBe(1000);
     expect(sent.payload.call.destination).toBe(5000);
@@ -138,26 +145,33 @@ describe('ElevatorService getLiftStatus', () => {
             ws.handler = undefined;
           }
         },
-        send: jest.fn(() => {
-          setTimeout(() => {
-            ws.handler?.(
-              JSON.stringify({
-                callType: 'monitor-lift-status',
-                data: { lift_mode: 'NOR' },
-              }),
-            );
-            ws.handler?.(
-              JSON.stringify({
-                callType: 'monitor-lift-position',
-                data: {
-                  cur: 5,
-                  dir: 'UP',
-                  moving_state: 'MOVING',
-                  door: true,
-                },
-              }),
-            );
-          }, 0);
+        send: jest.fn((payload) => {
+          try {
+            const parsed = JSON.parse(payload as string);
+            if (parsed?.callType === 'monitor') {
+              setTimeout(() => {
+                ws.handler?.(
+                  JSON.stringify({
+                    callType: 'monitor-lift-status',
+                    data: { lift_mode: 'NOR' },
+                  }),
+                );
+                ws.handler?.(
+                  JSON.stringify({
+                    callType: 'monitor-lift-position',
+                    data: {
+                      cur: 5,
+                      dir: 'UP',
+                      moving_state: 'MOVING',
+                      door: true,
+                    },
+                  }),
+                );
+              }, 0);
+            }
+          } catch {
+            // no-op
+          }
         }),
         close: jest.fn(),
       };
