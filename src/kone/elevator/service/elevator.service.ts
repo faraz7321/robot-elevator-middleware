@@ -151,27 +151,79 @@ export class ElevatorService {
     groupId: string,
     topology?: any,
     groupTerminals?: number[],
+    preferredType?: string | string[],
   ): number {
     const map = this.getTerminalMap(buildingId, groupId, topology);
-    // Candidates with type 'virtual' (case-insensitive)
-    const virtualIds = Array.from(map.entries())
-      .filter(([, t]) => t.toLowerCase() === 'virtual')
-      .map(([id]) => id);
-    if (virtualIds.length === 0) {
-      return Number(process.env.KONE_DEFAULT_TERMINAL_ID || 1001);
-    }
+
+    // Normalize preferences. Default to 'virtual' if not provided.
+    const prefs: string[] = (
+      Array.isArray(preferredType)
+        ? preferredType
+        : preferredType
+          ? [preferredType]
+          : ['virtual']
+    )
+      .filter(Boolean)
+      .map((s) => String(s).trim().toLowerCase());
+
+    // Helper: canonicalize terminal type names and check match by substring
+    const typeMatches = (termType: string, wanted: string) => {
+      const t = String(termType || '').toLowerCase();
+      const w = String(wanted || '').toLowerCase();
+      if (w === '*' || w === 'any') return true;
+      // common aliases/contains matching
+      const canonicalWanted = w;
+      const canonicalType = t.includes('virtual')
+        ? 'virtual'
+        : t.includes('dop')
+          ? 'vcs'
+          : t.includes('lcs')
+            ? 'lcs'
+            : t;
+      return (
+        canonicalType === canonicalWanted || t.includes(w) // fallback contains check
+      );
+    };
+
+    // Build candidates for each preferred type in order
+    const entries = Array.from(map.entries()); // [id, type]
     const groupTermList: number[] = Array.isArray(groupTerminals)
       ? groupTerminals
       : (topology as any)?.groups?.[0]?.terminals || [];
-    if (Array.isArray(groupTermList) && groupTermList.length > 0) {
-      const match = virtualIds.find((id) => groupTermList.includes(id));
-      if (match) return match;
+
+    for (const pref of prefs) {
+      const idsForType = entries
+        .filter(([, t]) => typeMatches(t, pref))
+        .map(([id]) => id);
+      if (idsForType.length === 0) continue;
+
+      // Prefer a terminal that's part of the group's terminals, if available
+      if (Array.isArray(groupTermList) && groupTermList.length > 0) {
+        const match = idsForType.find((id) => groupTermList.includes(id));
+        if (typeof match === 'number') return match;
+      }
+      return idsForType[0];
     }
-    return virtualIds[0];
+
+    // If no preferred type found, try any terminal within the group
+    if (Array.isArray(groupTermList) && groupTermList.length > 0) {
+      const anyInGroup = entries
+        .map(([id]) => id)
+        .find((id) => groupTermList.includes(id));
+      if (typeof anyInGroup === 'number') return anyInGroup;
+    }
+
+    // Fallback to env default or a deterministic first entry
+    if (entries.length === 0) {
+      return Number(process.env.KONE_DEFAULT_TERMINAL_ID || 1001);
+    }
+    return entries[0][0];
   }
 
   private formatBuildingId(id: string): string {
-    return id.startsWith(BUILDING_ID_PREFIX) ? id : `${BUILDING_ID_PREFIX}${id}`;
+    return id.startsWith(BUILDING_ID_PREFIX)
+      ? id
+      : `${BUILDING_ID_PREFIX}${id}`;
   }
 
   private buildFloorAreaMappings(
@@ -185,11 +237,21 @@ export class ElevatorService {
 
     const byFloor = new Map<
       number,
-      Array<{ areaId: number; shortName: string; groupSide?: number; terminals: number[] }>
+      Array<{
+        areaId: number;
+        shortName: string;
+        groupSide?: number;
+        terminals: number[];
+      }>
     >();
     const byArea = new Map<
       number,
-      { floor: number; shortName: string; groupSide?: number; terminals: number[] }
+      {
+        floor: number;
+        shortName: string;
+        groupSide?: number;
+        terminals: number[];
+      }
     >();
 
     const parseFloorNum = (name: any): number => {
@@ -197,12 +259,14 @@ export class ElevatorService {
       return m ? parseInt(m[0], 10) : NaN;
     };
 
-    const group = (topology?.groups || []).find((g: any) =>
-      String(g?.groupId || g?.group_id || '')
-        .split(':')
-        .pop()
-        ?.toString() === String(groupId),
-    ) || topology?.groups?.[0];
+    const group =
+      (topology?.groups || []).find(
+        (g: any) =>
+          String(g?.groupId || g?.group_id || '')
+            .split(':')
+            .pop()
+            ?.toString() === String(groupId),
+      ) || topology?.groups?.[0];
     const groupTerminals: number[] = Array.isArray(group?.terminals)
       ? group.terminals.map((n: any) => Number(n)).filter((n: any) => !isNaN(n))
       : [];
@@ -228,7 +292,9 @@ export class ElevatorService {
         const areaId = Number(
           typeof d?.area_id === 'number'
             ? d.area_id
-            : String(d?.area_id || '').split(':').pop(),
+            : String(d?.area_id || '')
+                .split(':')
+                .pop(),
         );
         const side =
           typeof d?.group_side === 'number' ? Number(d.group_side) : undefined;
@@ -242,7 +308,11 @@ export class ElevatorService {
     if (!byFloor.size && Array.isArray(topology?.areas)) {
       for (const a of topology.areas) {
         const floor = parseFloorNum(a?.shortName);
-        const areaId = Number(String(a?.areaId || '').split(':').pop());
+        const areaId = Number(
+          String(a?.areaId || '')
+            .split(':')
+            .pop(),
+        );
         pushEntry(floor, areaId, String(a?.shortName ?? ''));
       }
     }
@@ -278,14 +348,18 @@ export class ElevatorService {
     // Try topology candidates first, but validate that thousands part matches the floor
     if (Array.isArray(candidates) && candidates.length) {
       if (preferredTerminalId) {
-        const match = candidates.find((c) =>
-          Array.isArray(c.terminals) && c.terminals.includes(preferredTerminalId),
+        const match = candidates.find(
+          (c) =>
+            Array.isArray(c.terminals) &&
+            c.terminals.includes(preferredTerminalId),
         );
         if (match && this.areaIdLooksLikeFloor(match.areaId, floor)) {
           return match.areaId;
         }
       }
-      const first = candidates.find((c) => this.areaIdLooksLikeFloor(c.areaId, floor));
+      const first = candidates.find((c) =>
+        this.areaIdLooksLikeFloor(c.areaId, floor),
+      );
       if (first) return first.areaId;
       // If candidates exist but do not numerically match the requested floor, use rule-based mapping
       return this.mapFloorToAreaByRule(floor, groupId);
@@ -316,7 +390,10 @@ export class ElevatorService {
   // - "building:123456:2" (explicit group)
   // - "123456" (no prefix; no group)
   // - "123456:2" (no prefix; explicit group)
-  private parsePlaceId(placeId: string): { buildingId: string; groupId: string } {
+  private parsePlaceId(placeId: string): {
+    buildingId: string;
+    groupId: string;
+  } {
     let buildingPart = placeId;
     let groupId = '1';
     const parts = String(placeId).split(':');
@@ -361,31 +438,33 @@ export class ElevatorService {
 
       try {
         // Prepare listener for the ping event before sending
-        const pingEventPromise: Promise<void> = new Promise((resolve, reject) => {
-          const timer = setTimeout(() => {
-            webSocketConnection.off('message', onMessage);
-            reject(new Error('Ping event timeout'));
-          }, pingEventTimeoutMs);
+        const pingEventPromise: Promise<void> = new Promise(
+          (resolve, reject) => {
+            const timer = setTimeout(() => {
+              webSocketConnection.off('message', onMessage);
+              reject(new Error('Ping event timeout'));
+            }, pingEventTimeoutMs);
 
-          const onMessage = (data: string) => {
-            try {
-              const msg = JSON.parse(data);
-              if (
-                msg?.callType === 'ping' &&
-                String(msg?.data?.request_id) === String(requestId)
-              ) {
-                clearTimeout(timer);
-                webSocketConnection.off('message', onMessage);
-                logIncoming('kone websocket ping', msg);
-                resolve();
+            const onMessage = (data: string) => {
+              try {
+                const msg = JSON.parse(data);
+                if (
+                  msg?.callType === 'ping' &&
+                  String(msg?.data?.request_id) === String(requestId)
+                ) {
+                  clearTimeout(timer);
+                  webSocketConnection.off('message', onMessage);
+                  logIncoming('kone websocket ping', msg);
+                  resolve();
+                }
+              } catch {
+                // ignore non-JSON
               }
-            } catch {
-              // ignore non-JSON
-            }
-          };
-          // Ensure we see the event even if other listeners are added later
-          webSocketConnection.prependListener('message', onMessage);
-        });
+            };
+            // Ensure we see the event even if other listeners are added later
+            webSocketConnection.prependListener('message', onMessage);
+          },
+        );
 
         logOutgoing('kone websocket ping', payload);
         webSocketConnection.send(JSON.stringify(payload));
@@ -491,7 +570,11 @@ export class ElevatorService {
       let topology = this.buildingTopologyCache.get(cacheKey);
       if (!topology) {
         logOutgoing('kone fetchBuildingConfig', { buildingId, groupId });
-        topology = await fetchBuildingTopology(accessToken, buildingId, groupId);
+        topology = await fetchBuildingTopology(
+          accessToken,
+          buildingId,
+          groupId,
+        );
         logIncoming('kone fetchBuildingConfig', topology);
         this.buildingTopologyCache.set(cacheKey, topology);
       }
@@ -571,7 +654,7 @@ export class ElevatorService {
             if (msg.subtopic === `lift_${request.liftNo}/position`) {
               cache.position = plainToInstance(LiftPositionDTO, msg.data);
               // Some streams provide door state in position payload
-              if (typeof (msg.data?.door) !== 'undefined') {
+              if (typeof msg.data?.door !== 'undefined') {
                 doorState = msg.data.door ? 1 : 0;
                 doorReceived = true;
               }
@@ -588,13 +671,16 @@ export class ElevatorService {
               checkComplete();
             } else if (msg.subtopic === `lift_${request.liftNo}/status`) {
               // Lift mode is provided here for site-monitoring 'lift-status'
-              if (msg.data?.lift_mode !== undefined && msg.data?.lift_mode !== null) {
+              if (
+                msg.data?.lift_mode !== undefined &&
+                msg.data?.lift_mode !== null
+              ) {
                 modeStr = String(msg.data.lift_mode);
               }
               checkComplete();
             } else if (msg.callType === 'monitor-lift-position') {
               cache.position = plainToInstance(LiftPositionDTO, msg.data);
-              if (typeof (msg.data?.door) !== 'undefined') {
+              if (typeof msg.data?.door !== 'undefined') {
                 doorState = msg.data.door ? 1 : 0;
                 doorReceived = true;
               }
@@ -727,211 +813,238 @@ export class ElevatorService {
         targetGroupId,
       );
 
-    // Resolve target group and its topology
-    const groups = topology.groups || [];
-    const groupObj =
-      groups.find((g: any) =>
-        String(g.groupId || '')
-          .split(':')
-          .pop()
-          ?.toString() === String(targetGroupId),
-      ) || groups[0];
+      // Resolve target group and its topology
+      const groups = topology.groups || [];
+      const groupObj =
+        groups.find(
+          (g: any) =>
+            String(g.groupId || '')
+              .split(':')
+              .pop()
+              ?.toString() === String(targetGroupId),
+        ) || groups[0];
 
-    // Map lift numbers -> deck area ids (prefer deck index 0)
-    const liftDeckAreas = new Map<number, number[]>();
-    try {
-      for (const l of ((groupObj as any)?.lifts || []) as any[]) {
-        const liftNo = Number(String((l as any)?.liftId || (l as any)?.lift_id).split(':').pop());
-        if (isNaN(liftNo)) continue;
-        const decks = Array.isArray((l as any)?.decks) ? (l as any).decks : [];
-        const areas: number[] = [];
-        for (const d of decks as any[]) {
-          // area id may be available either as numeric area_id or prefixed deckAreaId
-          const raw =
-            typeof (d as any)?.area_id !== 'undefined' ? (d as any).area_id : (d as any)?.deckAreaId;
-          const areaNum = Number(String(raw ?? '').split(':').pop());
-          // prefer deck 0; include other decks only if deck is undefined
-          const deckIndex =
-            typeof (d as any)?.deck === 'number'
-              ? Number((d as any).deck)
-              : typeof (d as any)?.deckIndex === 'number'
-                ? Number((d as any).deckIndex)
-                : undefined;
-          if (!isNaN(areaNum)) {
-            if (deckIndex === 0) areas.push(areaNum);
-            else if (deckIndex === undefined) areas.push(areaNum);
+      // Map lift numbers -> deck area ids (prefer deck index 0)
+      const liftDeckAreas = new Map<number, number[]>();
+      try {
+        for (const l of ((groupObj as any)?.lifts || []) as any[]) {
+          const liftNo = Number(
+            String((l as any)?.liftId || (l as any)?.lift_id)
+              .split(':')
+              .pop(),
+          );
+          if (isNaN(liftNo)) continue;
+          const decks = Array.isArray((l as any)?.decks)
+            ? (l as any).decks
+            : [];
+          const areas: number[] = [];
+          for (const d of decks as any[]) {
+            // area id may be available either as numeric area_id or prefixed deckAreaId
+            const raw =
+              typeof (d as any)?.area_id !== 'undefined'
+                ? (d as any).area_id
+                : (d as any)?.deckAreaId;
+            const areaNum = Number(
+              String(raw ?? '')
+                .split(':')
+                .pop(),
+            );
+            // prefer deck 0; include other decks only if deck is undefined
+            const deckIndex =
+              typeof (d as any)?.deck === 'number'
+                ? Number((d as any).deck)
+                : typeof (d as any)?.deckIndex === 'number'
+                  ? Number((d as any).deckIndex)
+                  : undefined;
+            if (!isNaN(areaNum)) {
+              if (deckIndex === 0) areas.push(areaNum);
+              else if (deckIndex === undefined) areas.push(areaNum);
+            }
           }
+          if (areas.length) liftDeckAreas.set(liftNo, areas);
         }
-        if (areas.length) liftDeckAreas.set(liftNo, areas);
+      } catch {
+        // noop — fall back below
       }
-    } catch {
-      // noop — fall back below
-    }
 
-    // Select terminal from config (common-api config) with type 'Virtual'
-    const virtualTerminalId = this.pickTerminalId(
-      targetBuildingId,
-      targetGroupId,
-      topology,
-      (groupObj as any)?.terminals,
-    );
+      // Select terminal from config; hardcode preferred type order
+      // Prefer Virtual, then LCS, then VCS
+      const preferredTypes = [
+        'virtual',
+        //, 'lcs'
+        //, 'vcs'
+      ];
+      const virtualTerminalId = this.pickTerminalId(
+        targetBuildingId,
+        targetGroupId,
+        topology,
+        (groupObj as any)?.terminals,
+        preferredTypes.length ? preferredTypes : undefined,
+      );
 
-    // Resolve areas using robust per-group mapping
-    const fromArea = this.resolveAreaIdForFloor(
-      targetBuildingId,
-      targetGroupId,
-      topology,
-      request.fromFloor,
-      virtualTerminalId,
-    );
-    const toArea = this.resolveAreaIdForFloor(
-      targetBuildingId,
-      targetGroupId,
-      topology,
-      request.toFloor,
-      virtualTerminalId,
-    );
+      // Resolve areas using robust per-group mapping
+      const fromArea = this.resolveAreaIdForFloor(
+        targetBuildingId,
+        targetGroupId,
+        topology,
+        request.fromFloor,
+        virtualTerminalId,
+      );
+      const toArea = this.resolveAreaIdForFloor(
+        targetBuildingId,
+        targetGroupId,
+        topology,
+        request.toFloor,
+        virtualTerminalId,
+      );
 
-    // Build allowed_lifts strictly from the requested liftNo
-    let allowedLiftAreaIds: number[] = [];
-    {
-      const areas = liftDeckAreas.get(request.liftNo);
-      if (areas?.length) allowedLiftAreaIds.push(...areas);
-    }
-    // De-duplicate and keep numeric ids only
-    allowedLiftAreaIds = Array.from(
-      new Set(allowedLiftAreaIds.filter((n) => typeof n === 'number' && !isNaN(n))),
-    );
+      // Build allowed_lifts strictly from the requested liftNo
+      let allowedLiftAreaIds: number[] = [];
+      {
+        const areas = liftDeckAreas.get(request.liftNo);
+        if (areas?.length) allowedLiftAreaIds.push(...areas);
+      }
+      // De-duplicate and keep numeric ids only
+      allowedLiftAreaIds = Array.from(
+        new Set(
+          allowedLiftAreaIds.filter((n) => typeof n === 'number' && !isNaN(n)),
+        ),
+      );
 
-    const usedFromArea = fromArea;
-    const usedToArea = toArea;
-    logOutgoing('kone floor->area mapping', {
-      buildingId: targetBuildingId,
-      groupId: targetGroupId,
-      fromFloor: request.fromFloor,
-      toFloor: request.toFloor,
-      fromArea: usedFromArea,
-      toArea: usedToArea,
-      terminal: virtualTerminalId,
-      allowed_lifts: allowedLiftAreaIds,
-      mappingRule: 'validated-destinations-or-rule-fallback',
-    });
+      const usedFromArea = fromArea;
+      const usedToArea = toArea;
+      logOutgoing('kone floor->area mapping', {
+        buildingId: targetBuildingId,
+        groupId: targetGroupId,
+        fromFloor: request.fromFloor,
+        toFloor: request.toFloor,
+        fromArea: usedFromArea,
+        toArea: usedToArea,
+        terminal: virtualTerminalId,
+        allowed_lifts: allowedLiftAreaIds,
+        mappingRule: 'validated-destinations-or-rule-fallback',
+      });
 
       // Use the same WebSocket connection for the action
       logIncoming('kone websocket', { event: 'open' });
 
-    type CallEvent = {
-      callType: string;
-      data?: { request_id: number; success: boolean; session_id: number };
-    };
-
-    // Promise for call event carrying session information
-    const callEventPromise = new Promise<CallEvent>((resolve, reject) => {
-      const onMessage = (data: string) => {
-        try {
-          const parsed = JSON.parse(data) as CallEvent;
-          const callType = (parsed as any)?.callType;
-          const msgType = (parsed as any)?.type;
-          // Only log known callType events; ignore pure response (ok/error) here
-          if (callType === 'ping') {
-            logIncoming('kone websocket ping', parsed);
-          } else if (callType === 'action') {
-            logIncoming('kone websocket action', parsed);
-          } else if (msgType === 'ok' || msgType === 'error') {
-            // ack is logged elsewhere; skip duplicate logging here
-          }
-          if (
-            parsed.callType === 'action' &&
-            parsed.data?.request_id === requestId
-          ) {
-            webSocketConnection.off('message', onMessage);
-            resolve(parsed);
-          }
-        } catch (err) {
-          webSocketConnection.off('message', onMessage);
-          reject(err instanceof Error ? err : new Error(String(err)));
-        }
+      type CallEvent = {
+        callType: string;
+        data?: { request_id: number; success: boolean; session_id: number };
       };
-      webSocketConnection.on('message', onMessage);
-    });
 
-    // Build the call payload using the areas previously generated
-    const destinationCallPayload = {
-      type: 'lift-call-api-v2',
-      buildingId: targetBuildingId,
-      callType: 'action',
-      groupId: targetGroupId,
-      payload: {
-        request_id: requestId,
-        area: usedFromArea, // current floor
-        time: new Date().toISOString(),
-        terminal: virtualTerminalId,
-        
-        // terminal: 10011,
-        call: {
-          action: 3,
-          // Use deck area_ids from building config as allowed_lifts
-          ...(allowedLiftAreaIds.length
-            ? { allowed_lifts: allowedLiftAreaIds }
-            : {}),
-          destination: usedToArea,
-        },
-      },
-    };
-    logOutgoing('kone websocket action', destinationCallPayload);
-
-    // Send the request
-    webSocketConnection.send(JSON.stringify(destinationCallPayload));
-
-    // Wait for ack and call event concurrently, but log ack immediately when it arrives
-    const ackPromise = waitForResponse(
-      webSocketConnection,
-      String(requestId),
-      10,
-      true,
-    ).then((ack) => {
-      logIncoming('kone websocket acknowledgement', ack);
-      return ack;
-    });
-    const callEvent = await callEventPromise;
-    const wsResponse = await ackPromise;
-
-    const response = new CallElevatorResponseDTO();
-    if (callEvent.data?.success) {
-      response.errcode = 0;
-      response.errmsg = 'SUCCESS';
-      response.sessionId = callEvent.data?.session_id;
-      response.destination = request.toFloor;
-      // Save context for future hold_open calls from the same client
-      const liftDeck = Array.isArray(allowedLiftAreaIds)
-        ? Number(allowedLiftAreaIds[0])
-        : NaN;
-      this.lastDoorHoldContext.set(
-        this.getDoorCtxKey(request.deviceUuid, targetBuildingId, targetGroupId, request.liftNo),
-        {
-          buildingId: targetBuildingId,
-          groupId: targetGroupId,
-          liftNo: request.liftNo,
-          servedArea: usedFromArea,
-          liftDeck: isNaN(liftDeck) ? 0 : liftDeck,
-          terminalId: virtualTerminalId,
-          updatedAt: Date.now(),
-        },
-      );
-    } else {
-      response.errcode = 1;
-      response.errmsg = 'FAILURE';
-    }
-    response.connectionId = wsResponse.connectionId;
-    response.requestId = Number(wsResponse.requestId);
-    response.statusCode = wsResponse.statusCode;
-    // Cache successful journey result for idempotency window
-    if (response.errcode === 0) {
-      this.callIdempotencyCache.set(journeyKey, {
-        expiresAt: Date.now() + idempTtlMs,
-        response: plainToInstance(CallElevatorResponseDTO, response),
+      // Promise for call event carrying session information
+      const callEventPromise = new Promise<CallEvent>((resolve, reject) => {
+        const onMessage = (data: string) => {
+          try {
+            const parsed = JSON.parse(data) as CallEvent;
+            const callType = (parsed as any)?.callType;
+            const msgType = (parsed as any)?.type;
+            // Only log known callType events; ignore pure response (ok/error) here
+            if (callType === 'ping') {
+              logIncoming('kone websocket ping', parsed);
+            } else if (callType === 'action') {
+              logIncoming('kone websocket action', parsed);
+            } else if (msgType === 'ok' || msgType === 'error') {
+              // ack is logged elsewhere; skip duplicate logging here
+            }
+            if (
+              parsed.callType === 'action' &&
+              parsed.data?.request_id === requestId
+            ) {
+              webSocketConnection.off('message', onMessage);
+              resolve(parsed);
+            }
+          } catch (err) {
+            webSocketConnection.off('message', onMessage);
+            reject(err instanceof Error ? err : new Error(String(err)));
+          }
+        };
+        webSocketConnection.on('message', onMessage);
       });
-    }
+
+      // Build the call payload using the areas previously generated
+      const destinationCallPayload = {
+        type: 'lift-call-api-v2',
+        buildingId: targetBuildingId,
+        callType: 'action',
+        groupId: targetGroupId,
+        payload: {
+          request_id: requestId,
+          area: usedFromArea, // current floor
+          time: new Date().toISOString(),
+          terminal: virtualTerminalId,
+
+          // terminal: 10011,
+          call: {
+            action: 3,
+            // Use deck area_ids from building config as allowed_lifts
+            ...(allowedLiftAreaIds.length
+              ? { allowed_lifts: allowedLiftAreaIds }
+              : {}),
+            destination: usedToArea,
+          },
+        },
+      };
+      logOutgoing('kone websocket action', destinationCallPayload);
+
+      // Send the request
+      webSocketConnection.send(JSON.stringify(destinationCallPayload));
+
+      // Wait for ack and call event concurrently, but log ack immediately when it arrives
+      const ackPromise = waitForResponse(
+        webSocketConnection,
+        String(requestId),
+        10,
+        true,
+      ).then((ack) => {
+        logIncoming('kone websocket acknowledgement', ack);
+        return ack;
+      });
+      const callEvent = await callEventPromise;
+      const wsResponse = await ackPromise;
+
+      const response = new CallElevatorResponseDTO();
+      if (callEvent.data?.success) {
+        response.errcode = 0;
+        response.errmsg = 'SUCCESS';
+        response.sessionId = callEvent.data?.session_id;
+        response.destination = request.toFloor;
+        // Save context for future hold_open calls from the same client
+        const liftDeck = Array.isArray(allowedLiftAreaIds)
+          ? Number(allowedLiftAreaIds[0])
+          : NaN;
+        this.lastDoorHoldContext.set(
+          this.getDoorCtxKey(
+            request.deviceUuid,
+            targetBuildingId,
+            targetGroupId,
+            request.liftNo,
+          ),
+          {
+            buildingId: targetBuildingId,
+            groupId: targetGroupId,
+            liftNo: request.liftNo,
+            servedArea: usedFromArea,
+            liftDeck: isNaN(liftDeck) ? 0 : liftDeck,
+            terminalId: virtualTerminalId,
+            updatedAt: Date.now(),
+          },
+        );
+      } else {
+        response.errcode = 1;
+        response.errmsg = 'FAILURE';
+      }
+      response.connectionId = wsResponse.connectionId;
+      response.requestId = Number(wsResponse.requestId);
+      response.statusCode = wsResponse.statusCode;
+      // Cache successful journey result for idempotency window
+      if (response.errcode === 0) {
+        this.callIdempotencyCache.set(journeyKey, {
+          expiresAt: Date.now() + idempTtlMs,
+          response: plainToInstance(CallElevatorResponseDTO, response),
+        });
+      }
       return plainToInstance(CallElevatorResponseDTO, response);
     } finally {
       try {
@@ -957,7 +1070,11 @@ export class ElevatorService {
       let topology = this.buildingTopologyCache.get(cacheKey);
       if (!topology) {
         logOutgoing('kone fetchBuildingConfig', { buildingId, groupId });
-        topology = await fetchBuildingTopology(accessToken, buildingId, groupId);
+        topology = await fetchBuildingTopology(
+          accessToken,
+          buildingId,
+          groupId,
+        );
         logIncoming('kone fetchBuildingConfig', topology);
         this.buildingTopologyCache.set(cacheKey, topology);
       }
@@ -983,22 +1100,30 @@ export class ElevatorService {
       if (!servedArea || !liftDeck) {
         // Derive from topology if not found (best-effort)
         try {
+          // Hardcode preferred terminal type order for door-hold as well
+          const preferredTypes = ['virtual', 'lcs', 'vcs'];
           const virtualTerminalId = this.pickTerminalId(
             buildingId,
             targetGroupId,
             topology,
             (topology as any)?.groups?.[0]?.terminals,
+            preferredTypes.length ? preferredTypes : undefined,
           );
           terminalId = terminalId || virtualTerminalId;
           // Source floor is unknown at this point; try to resolve by current floor 0 mapping as last resort
           // Prefer mapping rule for a plausible area
-          servedArea = servedArea || this.mapFloorToAreaByRule(0, targetGroupId);
+          servedArea =
+            servedArea || this.mapFloorToAreaByRule(0, targetGroupId);
           // For lift deck, pick first deck's area id number if available
           const lift = (topology as any)?.groups?.[0]?.lifts?.find(
             (l: any) => this.getLiftNumber(l) === request.liftNo,
           );
           const d0 = lift?.decks?.[0];
-          const deckAreaNum = Number(String(d0?.deckAreaId ?? d0?.area_id ?? '').split(':').pop());
+          const deckAreaNum = Number(
+            String(d0?.deckAreaId ?? d0?.area_id ?? '')
+              .split(':')
+              .pop(),
+          );
           if (!isNaN(deckAreaNum)) liftDeck = deckAreaNum;
         } catch {}
       }
@@ -1077,18 +1202,28 @@ export class ElevatorService {
       let topology = this.buildingTopologyCache.get(cacheKey);
       if (!topology) {
         logOutgoing('kone fetchBuildingConfig', { buildingId, groupId });
-        topology = await fetchBuildingTopology(accessToken, buildingId, groupId);
+        topology = await fetchBuildingTopology(
+          accessToken,
+          buildingId,
+          groupId,
+        );
         logIncoming('kone fetchBuildingConfig', topology);
         this.buildingTopologyCache.set(cacheKey, topology);
       }
       const group = topology.groups?.[0];
       const targetGroupId = groupId;
-      const lift = group?.lifts?.find((l: any) => this.getLiftNumber(l) === request.liftNo);
+      const lift = group?.lifts?.find(
+        (l: any) => this.getLiftNumber(l) === request.liftNo,
+      );
       const area = lift?.floors?.[0]?.areasServed?.[0] || 0;
 
       const webSocketConnection = await openWebSocketConnection(accessToken);
       // Heartbeat gate: ensure connection is healthy before sending action
-      await this.ensureHeartbeat(webSocketConnection as unknown as WebSocket, buildingId, targetGroupId);
+      await this.ensureHeartbeat(
+        webSocketConnection as unknown as WebSocket,
+        buildingId,
+        targetGroupId,
+      );
       const actionPayload = {
         type: 'lift-call-api-v2',
         buildingId,
