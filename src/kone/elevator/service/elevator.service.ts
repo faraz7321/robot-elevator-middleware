@@ -688,7 +688,7 @@ export class ElevatorService {
         targetGroupId,
       );
 
-    // Determine allowed lifts (only those bound to the device)
+    // Resolve target group and its topology
     const groups = topology.groups || [];
     const groupObj =
       groups.find((g: any) =>
@@ -697,26 +697,6 @@ export class ElevatorService {
           .pop()
           ?.toString() === String(targetGroupId),
       ) || groups[0];
-    const groupLiftNumbers: number[] = (groupObj?.lifts || [])
-      .map((l: any) => Number(String(l?.liftId || l?.lift_id).split(':').pop()))
-      .filter((n: any) => !isNaN(n));
-    const boundSet = new Set<number>(
-      (this.deviceService?.getBoundLiftsForDevice?.(request.deviceUuid) || [])
-        .map((n) => Number(n))
-        .filter((n) => !isNaN(n)),
-    );
-    let allowedLifts: number[] = groupLiftNumbers.filter((n) => boundSet.has(n));
-    if (allowedLifts.length === 0) {
-      // fallback to request.liftNo if nothing intersects or bindings unknown
-      if (
-        (this.deviceService?.isDeviceBoundToLift?.(
-          request.deviceUuid,
-          request.liftNo,
-        ) ?? true) || groupLiftNumbers.includes(request.liftNo)
-      ) {
-        allowedLifts = [request.liftNo];
-      }
-    }
 
     // Map lift numbers -> deck area ids (prefer deck index 0)
     const liftDeckAreas = new Map<number, number[]>();
@@ -773,16 +753,9 @@ export class ElevatorService {
       virtualTerminalId,
     );
 
-    // Build allowed_lifts from deck area ids, using the filtered lift numbers
+    // Build allowed_lifts strictly from the requested liftNo
     let allowedLiftAreaIds: number[] = [];
-    if (allowedLifts.length) {
-      for (const ln of allowedLifts) {
-        const areas = liftDeckAreas.get(ln);
-        if (areas?.length) allowedLiftAreaIds.push(...areas);
-      }
-    }
-    if (!allowedLiftAreaIds.length) {
-      // Fallback to requested lift if mapping is incomplete
+    {
       const areas = liftDeckAreas.get(request.liftNo);
       if (areas?.length) allowedLiftAreaIds.push(...areas);
     }
