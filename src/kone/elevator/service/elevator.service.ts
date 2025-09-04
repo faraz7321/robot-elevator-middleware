@@ -697,6 +697,37 @@ export class ElevatorService {
       }
     }
 
+    // Map lift numbers -> deck area ids (prefer deck index 0)
+    const liftDeckAreas = new Map<number, number[]>();
+    try {
+      for (const l of ((groupObj as any)?.lifts || []) as any[]) {
+        const liftNo = Number(String((l as any)?.liftId || (l as any)?.lift_id).split(':').pop());
+        if (isNaN(liftNo)) continue;
+        const decks = Array.isArray((l as any)?.decks) ? (l as any).decks : [];
+        const areas: number[] = [];
+        for (const d of decks as any[]) {
+          // area id may be available either as numeric area_id or prefixed deckAreaId
+          const raw =
+            typeof (d as any)?.area_id !== 'undefined' ? (d as any).area_id : (d as any)?.deckAreaId;
+          const areaNum = Number(String(raw ?? '').split(':').pop());
+          // prefer deck 0; include other decks only if deck is undefined
+          const deckIndex =
+            typeof (d as any)?.deck === 'number'
+              ? Number((d as any).deck)
+              : typeof (d as any)?.deckIndex === 'number'
+                ? Number((d as any).deckIndex)
+                : undefined;
+          if (!isNaN(areaNum)) {
+            if (deckIndex === 0) areas.push(areaNum);
+            else if (deckIndex === undefined) areas.push(areaNum);
+          }
+        }
+        if (areas.length) liftDeckAreas.set(liftNo, areas);
+      }
+    } catch {
+      // noop — fall back below
+    }
+
     // Select terminal from config (common-api config) with type 'Virtual'
     const virtualTerminalId = this.pickTerminalId(
       targetBuildingId,
@@ -721,6 +752,24 @@ export class ElevatorService {
       virtualTerminalId,
     );
 
+    // Build allowed_lifts from deck area ids, using the filtered lift numbers
+    let allowedLiftAreaIds: number[] = [];
+    if (allowedLifts.length) {
+      for (const ln of allowedLifts) {
+        const areas = liftDeckAreas.get(ln);
+        if (areas?.length) allowedLiftAreaIds.push(...areas);
+      }
+    }
+    if (!allowedLiftAreaIds.length) {
+      // Fallback to requested lift if mapping is incomplete
+      const areas = liftDeckAreas.get(request.liftNo);
+      if (areas?.length) allowedLiftAreaIds.push(...areas);
+    }
+    // De-duplicate and keep numeric ids only
+    allowedLiftAreaIds = Array.from(
+      new Set(allowedLiftAreaIds.filter((n) => typeof n === 'number' && !isNaN(n))),
+    );
+
     logOutgoing('kone floor->area mapping', {
       buildingId: targetBuildingId,
       groupId: targetGroupId,
@@ -729,6 +778,7 @@ export class ElevatorService {
       fromArea,
       toArea,
       terminal: virtualTerminalId,
+      allowed_lifts: allowedLiftAreaIds,
     });
 
       // Use the same WebSocket connection for the action
@@ -784,7 +834,10 @@ export class ElevatorService {
         // terminal: 10011,
         call: {
           action: 3,
-          //allowed_lifts: allowedLifts,
+          // Use deck area_ids from building config as allowed_lifts
+          ...(allowedLiftAreaIds.length
+            ? { allowed_lifts: allowedLiftAreaIds }
+            : {}),
           destination: toArea,
         },
       },
