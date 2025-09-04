@@ -867,7 +867,7 @@ export class ElevatorService {
       // Prefer Virtual, then LCS, then DOP
       const preferredTypes = [
         'virtual',
-        //, 'lcs'
+        // 'lcs'
         //, 'vcs'
       ];
       const virtualTerminalId = this.pickTerminalId(
@@ -973,7 +973,7 @@ export class ElevatorService {
 
           // terminal: 10011,
           call: {
-            action: 3,
+            action: 2,
             // Use deck area_ids from building config as allowed_lifts
             ...(allowedLiftAreaIds.length
               ? { allowed_lifts: allowedLiftAreaIds }
