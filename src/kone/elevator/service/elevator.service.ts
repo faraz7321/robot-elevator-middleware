@@ -229,6 +229,20 @@ export class ElevatorService {
     return entry;
   }
 
+  private mapFloorToAreaByRule(floor: number, groupId: string): number {
+    const gid = Number(String(groupId).split(':').pop());
+    if (!isFinite(floor) || isNaN(floor)) return 0;
+    if (gid === 2) return floor * 1000 + 20; // group 2 -> XX020
+    // default/group 1 -> XX000
+    return floor * 1000;
+  }
+
+  private areaIdLooksLikeFloor(areaId: number, floor: number): boolean {
+    if (typeof areaId !== 'number' || isNaN(areaId)) return false;
+    const thousands = Math.floor(areaId / 1000);
+    return thousands === floor;
+  }
+
   private resolveAreaIdForFloor(
     buildingId: string,
     groupId: string,
@@ -238,16 +252,23 @@ export class ElevatorService {
   ): number {
     const mapping = this.buildFloorAreaMappings(buildingId, groupId, topology);
     const candidates = mapping.byFloor.get(floor);
+    // Try topology candidates first, but validate that thousands part matches the floor
     if (Array.isArray(candidates) && candidates.length) {
       if (preferredTerminalId) {
         const match = candidates.find((c) =>
           Array.isArray(c.terminals) && c.terminals.includes(preferredTerminalId),
         );
-        if (match) return match.areaId;
+        if (match && this.areaIdLooksLikeFloor(match.areaId, floor)) {
+          return match.areaId;
+        }
       }
-      return candidates[0].areaId;
+      const first = candidates.find((c) => this.areaIdLooksLikeFloor(c.areaId, floor));
+      if (first) return first.areaId;
+      // If candidates exist but do not numerically match the requested floor, use rule-based mapping
+      return this.mapFloorToAreaByRule(floor, groupId);
     }
-    return floor * 1000;
+    // No candidates — use rule-based mapping
+    return this.mapFloorToAreaByRule(floor, groupId);
   }
 
   // Parses robot request placeId into KONE buildingId and groupId
@@ -770,15 +791,18 @@ export class ElevatorService {
       new Set(allowedLiftAreaIds.filter((n) => typeof n === 'number' && !isNaN(n))),
     );
 
+    const usedFromArea = fromArea;
+    const usedToArea = toArea;
     logOutgoing('kone floor->area mapping', {
       buildingId: targetBuildingId,
       groupId: targetGroupId,
       fromFloor: request.fromFloor,
       toFloor: request.toFloor,
-      fromArea,
-      toArea,
+      fromArea: usedFromArea,
+      toArea: usedToArea,
       terminal: virtualTerminalId,
       allowed_lifts: allowedLiftAreaIds,
+      mappingRule: 'validated-destinations-or-rule-fallback',
     });
 
       // Use the same WebSocket connection for the action
@@ -827,7 +851,7 @@ export class ElevatorService {
       groupId: targetGroupId,
       payload: {
         request_id: requestId,
-        area: fromArea, //current floor
+        area: usedFromArea, // current floor
         time: new Date().toISOString(),
         terminal: virtualTerminalId,
         
@@ -838,7 +862,7 @@ export class ElevatorService {
           ...(allowedLiftAreaIds.length
             ? { allowed_lifts: allowedLiftAreaIds }
             : {}),
-          destination: toArea,
+          destination: usedToArea,
         },
       },
     };
