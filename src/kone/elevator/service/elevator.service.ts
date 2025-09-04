@@ -509,42 +509,38 @@ export class ElevatorService {
     return topology;
   }
 
+  // (no local config.json reading)
+
   async listElevators(
     request: ListElevatorsRequestDTO,
   ): Promise<ListElevatorsResponseDTO> {
     const response = new ListElevatorsResponseDTO();
-
     const { buildingId, groupId } = this.parsePlaceId(request.placeId);
     const topology = await this.getBuildingTopology(buildingId, groupId);
-    const destinationNameMap = new Map<number, string>(
-      (topology as any).destinations?.map((dest: any) => [
-        dest.group_floor_id,
-        dest.short_name,
-      ]) || [],
-    );
 
     response.result =
-      (topology as any).groups?.flatMap((group: any) =>
-        (group.lifts || []).map((lift: any) => {
-          const floorNames = new Set<string>();
-          (lift.floors || []).forEach((floor: any) => {
-            const name = destinationNameMap.get(floor.group_floor_id);
-            if (name) {
-              const numeric = name.replace(/\D/g, '');
-              if (numeric) floorNames.add(numeric);
-            }
-          });
-          const liftNo =
-            typeof lift.lift_id !== 'undefined'
-              ? Number(lift.lift_id)
-              : Number(String(lift.liftId).split(':').pop());
+      (topology as any).groups?.flatMap((group: any) => {
+        const lifts: any[] = Array.isArray(group?.lifts) ? group.lifts : [];
+        return lifts.map((lift: any) => {
+          const liftNo = this.getLiftNumber(lift);
+          const floorsArr: any[] = Array.isArray(lift?.floors) ? lift.floors : [];
+          const nums = new Set<number>();
+          for (const f of floorsArr) {
+            const n = Number(
+              typeof f?.lift_floor_id !== 'undefined'
+                ? f.lift_floor_id
+                : f?.group_floor_id,
+            );
+            if (isFinite(n)) nums.add(n);
+          }
+          const sorted = Array.from(nums).sort((a, b) => a - b);
           return {
             liftNo,
-            accessibleFloors: Array.from(floorNames).join(','),
+            accessibleFloors: sorted.join(','),
             bindingStatus: '11',
           };
-        }),
-      ) || [];
+        });
+      }) || [];
 
     response.errcode = 0;
     response.errmsg = 'SUCCESS';
@@ -868,7 +864,7 @@ export class ElevatorService {
       }
 
       // Select terminal from config; hardcode preferred type order
-      // Prefer Virtual, then LCS, then VCS
+      // Prefer Virtual, then LCS, then DOP
       const preferredTypes = [
         'virtual',
         //, 'lcs'
