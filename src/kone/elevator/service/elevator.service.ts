@@ -83,6 +83,29 @@ export class ElevatorService {
     { expiresAt: number; response: CallElevatorResponseDTO }
   > = new Map();
 
+  // Persist last successful call context per device+place+lift
+  private lastDoorHoldContext: Map<
+    string,
+    {
+      buildingId: string;
+      groupId: string;
+      liftNo: number;
+      servedArea: number; // source area used when calling the lift
+      liftDeck: number; // deck identifier matching the number used in allowed_lifts
+      terminalId?: number;
+      updatedAt: number;
+    }
+  > = new Map();
+
+  private getDoorCtxKey(
+    deviceUuid: string,
+    buildingId: string,
+    groupId: string,
+    liftNo: number,
+  ) {
+    return `${deviceUuid}|${buildingId}|${groupId}|${liftNo}`;
+  }
+
   private getTerminalMap(
     buildingId: string,
     groupId: string,
@@ -269,6 +292,22 @@ export class ElevatorService {
     }
     // No candidates — use rule-based mapping
     return this.mapFloorToAreaByRule(floor, groupId);
+  }
+
+  private getLiftNumber(lift: any): number {
+    if (lift == null) return NaN;
+    const direct = lift.lift_id ?? lift.liftNo ?? lift.id;
+    if (typeof direct !== 'undefined') {
+      const n = Number(direct);
+      if (!isNaN(n)) return n;
+    }
+    const raw = lift.liftId ?? lift.lift_id_str ?? lift.identifier;
+    if (raw != null) {
+      const tail = String(raw).split(':').pop();
+      const n = Number(tail);
+      if (!isNaN(n)) return n;
+    }
+    return NaN;
   }
 
   // Parses robot request placeId into KONE buildingId and groupId
@@ -863,6 +902,22 @@ export class ElevatorService {
       response.errmsg = 'SUCCESS';
       response.sessionId = callEvent.data?.session_id;
       response.destination = request.toFloor;
+      // Save context for future hold_open calls from the same client
+      const liftDeck = Array.isArray(allowedLiftAreaIds)
+        ? Number(allowedLiftAreaIds[0])
+        : NaN;
+      this.lastDoorHoldContext.set(
+        this.getDoorCtxKey(request.deviceUuid, targetBuildingId, targetGroupId, request.liftNo),
+        {
+          buildingId: targetBuildingId,
+          groupId: targetGroupId,
+          liftNo: request.liftNo,
+          servedArea: usedFromArea,
+          liftDeck: isNaN(liftDeck) ? 0 : liftDeck,
+          terminalId: virtualTerminalId,
+          updatedAt: Date.now(),
+        },
+      );
     } else {
       response.errcode = 1;
       response.errmsg = 'FAILURE';
@@ -906,17 +961,60 @@ export class ElevatorService {
         logIncoming('kone fetchBuildingConfig', topology);
         this.buildingTopologyCache.set(cacheKey, topology);
       }
-      const group = topology.groups?.[0];
+
       const targetGroupId = groupId;
-      const lift = group?.lifts.find(
-        (l) => Number(l.liftId.split(':').pop()) === request.liftNo,
+
+      // Fetch previously saved context; fall back to deriving if missing
+      const ctxKey = this.getDoorCtxKey(
+        request.deviceUuid,
+        buildingId,
+        targetGroupId,
+        request.liftNo,
       );
-      const deck = lift?.decks?.[0];
-      const servedArea = deck?.areasServed?.[0] || 0;
+      let servedArea = 0;
+      let liftDeck = 0;
+      let terminalId: number | undefined;
+      const saved = this.lastDoorHoldContext.get(ctxKey);
+      if (saved) {
+        servedArea = saved.servedArea || 0;
+        liftDeck = saved.liftDeck || 0;
+        terminalId = saved.terminalId;
+      }
+      if (!servedArea || !liftDeck) {
+        // Derive from topology if not found (best-effort)
+        try {
+          const virtualTerminalId = this.pickTerminalId(
+            buildingId,
+            targetGroupId,
+            topology,
+            (topology as any)?.groups?.[0]?.terminals,
+          );
+          terminalId = terminalId || virtualTerminalId;
+          // Source floor is unknown at this point; try to resolve by current floor 0 mapping as last resort
+          // Prefer mapping rule for a plausible area
+          servedArea = servedArea || this.mapFloorToAreaByRule(0, targetGroupId);
+          // For lift deck, pick first deck's area id number if available
+          const lift = (topology as any)?.groups?.[0]?.lifts?.find(
+            (l: any) => this.getLiftNumber(l) === request.liftNo,
+          );
+          const d0 = lift?.decks?.[0];
+          const deckAreaNum = Number(String(d0?.deckAreaId ?? d0?.area_id ?? '').split(':').pop());
+          if (!isNaN(deckAreaNum)) liftDeck = deckAreaNum;
+        } catch {}
+      }
 
       const webSocketConnection = await openWebSocketConnection(accessToken);
       // Heartbeat gate: ensure connection is healthy before sending hold_open
-      await this.ensureHeartbeat(webSocketConnection as unknown as WebSocket, buildingId, targetGroupId);
+      await this.ensureHeartbeat(
+        webSocketConnection as unknown as WebSocket,
+        buildingId,
+        targetGroupId,
+      );
+      const nowIso = Number(request.ts)
+        ? new Date(Number(request.ts)).toISOString()
+        : new Date().toISOString();
+      const softTime = Number(request.seconds) || 0;
+      const hardTime = softTime; // mirror soft_time for explicit control
       const holdOpenPayload = {
         type: 'lift-call-api-v2',
         buildingId,
@@ -924,14 +1022,24 @@ export class ElevatorService {
         callType: 'hold_open',
         payload: {
           request_id: requestId,
-          area: servedArea,
-          time: new Date().toISOString(),
-          terminal: 1,
-          lift_deck: deck?.deckAreaId,
+          time: nowIso,
+          //terminal: terminalId ?? 1,
           served_area: servedArea,
-          soft_time: request.seconds,
+          lift_deck: liftDeck,
+          //soft_time: softTime,
+          hard_time: hardTime,
         },
-      };
+      } as const;
+      logOutgoing('kone hold_open context', {
+        deviceUuid: request.deviceUuid,
+        buildingId,
+        groupId: targetGroupId,
+        liftNo: request.liftNo,
+        served_area: servedArea,
+        lift_deck: liftDeck,
+        //terminal: terminalId ?? 1,
+        source: saved ? 'saved' : 'derived',
+      });
       logOutgoing('kone websocket hold_open', holdOpenPayload);
       webSocketConnection.send(JSON.stringify(holdOpenPayload));
 
@@ -975,9 +1083,7 @@ export class ElevatorService {
       }
       const group = topology.groups?.[0];
       const targetGroupId = groupId;
-      const lift = group?.lifts.find(
-        (l) => Number(l.liftId.split(':').pop()) === request.liftNo,
-      );
+      const lift = group?.lifts?.find((l: any) => this.getLiftNumber(l) === request.liftNo);
       const area = lift?.floors?.[0]?.areasServed?.[0] || 0;
 
       const webSocketConnection = await openWebSocketConnection(accessToken);
