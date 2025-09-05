@@ -527,7 +527,11 @@ export async function waitForResponse(
     const onMessage = function (data: string) {
       try {
         const dataBlob = JSON.parse(data);
-        if (String(dataBlob.requestId) === String(requestId)) {
+        const matchesRequest =
+          String(dataBlob.requestId) === String(requestId) ||
+          String(dataBlob?.payload?.request_id) === String(requestId) ||
+          String(dataBlob?.data?.request_id) === String(requestId);
+        if (matchesRequest) {
           if (
             !resolveAny &&
             dataBlob.type !== 'ok' &&

@@ -97,6 +97,22 @@ export class ElevatorService {
     }
   > = new Map();
 
+  // Background schedulers for door hold-open per client+place+lift
+  private doorHoldTasks: Map<
+    string,
+    {
+      connection: WebSocket;
+      buildingId: string;
+      groupId: string;
+      servedArea: number;
+      liftDeck: number;
+      terminalId?: number;
+      endAtMs: number; // when we plan to stop extending (client request horizon)
+      timer?: NodeJS.Timeout;
+      active: boolean;
+    }
+  > = new Map();
+
   private getDoorCtxKey(
     deviceUuid: string,
     buildingId: string,
@@ -490,6 +506,44 @@ export class ElevatorService {
         throw err instanceof Error ? err : new Error(String(err));
       }
     }
+  }
+
+  // Helper to send a single hold_open message with given timings
+  private async sendHoldOpen(
+    connection: WebSocket,
+    params: {
+      buildingId: string;
+      groupId: string;
+      servedArea: number;
+      liftDeck: number;
+      hardTimeSec: number; // 0..10
+      softTimeSec?: number; // optional, recommended 5 or 0 when releasing
+    },
+  ): Promise<WebSocketResponse> {
+    const requestId = this.getRequestId();
+    const nowIso = new Date().toISOString();
+    const softTime = Math.max(0, Math.floor(params.softTimeSec ?? 0));
+    const hardTime = Math.max(0, Math.floor(params.hardTimeSec));
+    const payload = {
+      type: 'lift-call-api-v2',
+      buildingId: params.buildingId,
+      groupId: params.groupId,
+      callType: 'hold_open',
+      payload: {
+        request_id: requestId,
+        time: nowIso,
+        served_area: params.servedArea,
+        lift_deck: params.liftDeck,
+        soft_time: softTime,
+        hard_time: hardTime,
+      },
+    } as const;
+
+    logOutgoing('kone websocket hold_open', payload);
+    connection.send(JSON.stringify(payload));
+    const res = await waitForResponse(connection, String(requestId), 10, true);
+    logIncoming('kone websocket acknowledgement', res);
+    return res;
   }
 
   private async getBuildingTopology(
@@ -962,6 +1016,7 @@ export class ElevatorService {
       // Build the call payload using the areas previously generated
       const destinationCallPayload = {
         type: 'lift-call-api-v2',
+        requestId: String(requestId),
         buildingId: targetBuildingId,
         callType: 'action',
         groupId: targetGroupId,
@@ -1055,7 +1110,6 @@ export class ElevatorService {
   ): Promise<BaseResponseDTO> {
     const response = new BaseResponseDTO();
     try {
-      const requestId = this.getRequestId();
       const { buildingId, groupId } = this.parsePlaceId(request.placeId);
       const accessToken = await this.accessTokenService.getAccessToken(
         buildingId,
@@ -1124,33 +1178,6 @@ export class ElevatorService {
         } catch {}
       }
 
-      const webSocketConnection = await openWebSocketConnection(accessToken);
-      // Heartbeat gate: ensure connection is healthy before sending hold_open
-      await this.ensureHeartbeat(
-        webSocketConnection as unknown as WebSocket,
-        buildingId,
-        targetGroupId,
-      );
-      const nowIso = Number(request.ts)
-        ? new Date(Number(request.ts)).toISOString()
-        : new Date().toISOString();
-      const softTime = Number(request.seconds) || 0;
-      const hardTime = softTime; // mirror soft_time for explicit control
-      const holdOpenPayload = {
-        type: 'lift-call-api-v2',
-        buildingId,
-        groupId: targetGroupId,
-        callType: 'hold_open',
-        payload: {
-          request_id: requestId,
-          time: nowIso,
-          //terminal: terminalId ?? 1,
-          served_area: servedArea,
-          lift_deck: liftDeck,
-          //soft_time: softTime,
-          hard_time: hardTime,
-        },
-      } as const;
       logOutgoing('kone hold_open context', {
         deviceUuid: request.deviceUuid,
         buildingId,
@@ -1161,18 +1188,166 @@ export class ElevatorService {
         //terminal: terminalId ?? 1,
         source: saved ? 'saved' : 'derived',
       });
-      logOutgoing('kone websocket hold_open', holdOpenPayload);
-      webSocketConnection.send(JSON.stringify(holdOpenPayload));
+      const requestedSeconds = Math.max(0, Math.floor(Number(request.seconds) || 0));
 
-      const wsResponse = await waitForResponse(
-        webSocketConnection,
-        String(requestId),
+      // If there is an existing task for this client+lift, update or cancel it
+      const existing = this.doorHoldTasks.get(ctxKey);
+
+      // Helper to open or ensure connection
+      const ensureConnection = async (): Promise<WebSocket> => {
+        if (existing?.connection && existing.active) return existing.connection;
+        const conn = await openWebSocketConnection(accessToken);
+        await this.ensureHeartbeat(conn as unknown as WebSocket, buildingId, targetGroupId);
+        return conn as unknown as WebSocket;
+      };
+
+      // Constants for scheduling
+      const MAX_HARD_SEC = Math.max(
+        1,
+        Math.min(10, Number(process.env.KONE_HOLD_OPEN_MAX_HARD_SECONDS || 10)),
       );
-      logIncoming('kone websocket acknowledgement', wsResponse);
-      webSocketConnection.close();
+      const SOFT_SEC = Math.max(
+        0,
+        Math.min(
+          MAX_HARD_SEC,
+          Number(process.env.KONE_HOLD_OPEN_SOFT_SECONDS || 5),
+        ),
+      );
+      const INTERVAL_MS = Math.max(
+        1000,
+        Number(process.env.KONE_HOLD_OPEN_SEND_INTERVAL_MS || 7000),
+      );
+      const RELEASE_AT_END = String(
+        process.env.KONE_HOLD_OPEN_SEND_RELEASE_AT_END || 'true',
+      ).toLowerCase() !== 'false';
 
-      response.errcode = wsResponse.statusCode === 200 ? 0 : 1;
-      response.errmsg = wsResponse.statusCode === 200 ? 'SUCCESS' : 'FAILURE';
+      // If requestedSeconds is 0, send a release (0/0) and cancel any existing task
+      if (requestedSeconds === 0) {
+        const conn = await ensureConnection();
+        await this.sendHoldOpen(conn, {
+          buildingId,
+          groupId: targetGroupId,
+          servedArea,
+          liftDeck,
+          hardTimeSec: 0,
+          softTimeSec: 0,
+        });
+        try {
+          conn.close();
+        } catch {}
+        if (existing?.timer) clearTimeout(existing.timer);
+        if (existing) this.doorHoldTasks.delete(ctxKey);
+        response.errcode = 0;
+        response.errmsg = 'SUCCESS';
+        return response;
+      }
+
+      // Start or update background scheduler
+      const startOrUpdate = async () => {
+        // If a task exists, just extend or shorten the end time
+        if (existing && existing.active) {
+          existing.endAtMs = Date.now() + requestedSeconds * 1000;
+          response.errcode = 0;
+          response.errmsg = 'SUCCESS';
+          return;
+        }
+
+        // Else create a new task with its own connection
+        const connection = await ensureConnection();
+        const task = {
+          connection,
+          buildingId,
+          groupId: targetGroupId,
+          servedArea,
+          liftDeck,
+          terminalId,
+          endAtMs: Date.now() + requestedSeconds * 1000,
+          timer: undefined as unknown as NodeJS.Timeout | undefined,
+          active: true,
+        };
+        this.doorHoldTasks.set(ctxKey, task);
+
+        // Define the tick function that keeps extending before expiry
+        const tick = async () => {
+          if (!task.active) return;
+          const now = Date.now();
+          const remainingMs = task.endAtMs - now;
+          // If we're very close to or past the requested horizon, optionally release and stop
+          if (remainingMs <= 500) {
+            if (RELEASE_AT_END) {
+              try {
+                await this.sendHoldOpen(task.connection, {
+                  buildingId: task.buildingId,
+                  groupId: task.groupId,
+                  servedArea: task.servedArea,
+                  liftDeck: task.liftDeck,
+                  hardTimeSec: 0,
+                  softTimeSec: 0,
+                });
+              } catch (e) {
+                // log and ignore
+                console.error('hold_open release failed', e);
+              }
+            }
+            task.active = false;
+            try {
+              task.connection.close();
+            } catch {}
+            this.doorHoldTasks.delete(ctxKey);
+            return;
+          }
+
+          // Send an extension chunk (hard<=10) with soft time recommended 5s
+          const hardTimeSec = Math.min(MAX_HARD_SEC, Math.ceil(remainingMs / 1000));
+          const softTimeSec = Math.min(SOFT_SEC, hardTimeSec);
+          const sendStartedAt = Date.now();
+          try {
+            await this.sendHoldOpen(task.connection, {
+              buildingId: task.buildingId,
+              groupId: task.groupId,
+              servedArea: task.servedArea,
+              liftDeck: task.liftDeck,
+              hardTimeSec,
+              softTimeSec,
+            });
+          } catch (e) {
+            console.error('hold_open send failed', e);
+          }
+
+          // Schedule next send a bit before hard time expiry
+          const elapsed = Date.now() - sendStartedAt;
+          const nextIn = Math.max(0, INTERVAL_MS - elapsed);
+          task.timer = setTimeout(tick, nextIn);
+        };
+
+        // Send the first hold_open immediately and schedule next
+        try {
+          await this.sendHoldOpen(connection, {
+            buildingId,
+            groupId: targetGroupId,
+            servedArea,
+            liftDeck,
+            hardTimeSec: Math.min(MAX_HARD_SEC, requestedSeconds),
+            softTimeSec: Math.min(SOFT_SEC, Math.min(MAX_HARD_SEC, requestedSeconds)),
+          });
+          // Schedule next extension only if more time remains beyond our chosen interval
+          const nextIn = Math.min(INTERVAL_MS, requestedSeconds * 1000);
+          task.timer = setTimeout(tick, nextIn);
+          response.errcode = 0;
+          response.errmsg = 'SUCCESS';
+        } catch (e) {
+          console.error('Failed to start door hold schedule', e);
+          // Cleanup on failure
+          try {
+            connection.close();
+          } catch {}
+          this.doorHoldTasks.delete(ctxKey);
+          response.errcode = 1;
+          response.errmsg = 'FAILED';
+        }
+      };
+
+      await startOrUpdate();
     } catch (err) {
       console.error('Failed to delay elevator doors', err);
       response.errcode = 1;
@@ -1187,7 +1362,7 @@ export class ElevatorService {
   ): Promise<BaseResponseDTO> {
     const response = new BaseResponseDTO();
     try {
-      const requestId = this.getRequestId();
+      const requestId = uuidv4();
       const { buildingId, groupId } = this.parsePlaceId(request.placeId);
       const accessToken = await this.accessTokenService.getAccessToken(
         buildingId,
@@ -1222,6 +1397,7 @@ export class ElevatorService {
       );
       const actionPayload = {
         type: 'lift-call-api-v2',
+        requestId: String(requestId),
         buildingId,
         groupId: targetGroupId,
         callType: 'action',
@@ -1240,7 +1416,8 @@ export class ElevatorService {
 
       const wsResponse = await waitForResponse(
         webSocketConnection,
-        String(requestId),
+        requestId,
+        
       );
       logIncoming('kone websocket acknowledgement', wsResponse);
       webSocketConnection.close();
