@@ -975,6 +975,68 @@ export class ElevatorService {
         mappingRule: 'validated-destinations-or-rule-fallback',
       });
 
+      // Before placing a call, ensure lift_mode == 0 from `lift_${request.liftNo}/status`
+      try {
+        const statusRequestId = uuidv4();
+        const monitorStatusPayload = {
+          type: 'site-monitoring',
+          requestId: statusRequestId,
+          buildingId: targetBuildingId,
+          callType: 'monitor',
+          groupId: targetGroupId,
+          payload: {
+            sub: `status-check-${Date.now()}`,
+            duration: 5,
+            subtopics: [`lift_${request.liftNo}/status`],
+          },
+        } as const;
+        logOutgoing('kone websocket monitor (pre-call lift_mode)', monitorStatusPayload);
+        webSocketConnection.send(JSON.stringify(monitorStatusPayload));
+        await waitForResponse(webSocketConnection, statusRequestId, 5, true);
+
+        const modeOk: boolean = await new Promise((resolve) => {
+          const timeoutMs = Number(process.env.KONE_LIFT_MODE_WAIT_TIMEOUT_MS || 2000);
+          const timer = setTimeout(() => {
+            webSocketConnection.off('message', onMessage);
+            resolve(false); // could not confirm mode==0 in time
+          }, timeoutMs);
+
+          const onMessage = (data: string) => {
+            try {
+              const msg = JSON.parse(data);
+              // Accept either subtopic or callType variants
+              const isStatusEvent =
+                msg?.subtopic === `lift_${request.liftNo}/status` ||
+                msg?.callType === 'monitor-lift-status';
+              if (!isStatusEvent) return;
+              logIncoming('kone websocket monitor (pre-call lift_status)', msg);
+              const raw = msg?.data?.lift_mode;
+              // Only proceed if lift_mode is strictly 0
+              const ok = raw === 0 || raw === '0';
+              clearTimeout(timer);
+              webSocketConnection.off('message', onMessage);
+              resolve(Boolean(ok));
+            } catch {
+              // ignore non-JSON
+            }
+          };
+          webSocketConnection.on('message', onMessage);
+        });
+
+        if (!modeOk) {
+          const blocked = new CallElevatorResponseDTO();
+          blocked.errcode = 1;
+          blocked.errmsg = 'LIFT_UNAVAILABLE';
+          return plainToInstance(CallElevatorResponseDTO, blocked);
+        }
+      } catch (e) {
+        // If status check fails for any reason, do not place the call
+        const blocked = new CallElevatorResponseDTO();
+        blocked.errcode = 1;
+        blocked.errmsg = 'LIFT_UNAVAILABLE';
+        return plainToInstance(CallElevatorResponseDTO, blocked);
+      }
+
       // Use the same WebSocket connection for the action
       logIncoming('kone websocket', { event: 'open' });
 
