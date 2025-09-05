@@ -1016,7 +1016,6 @@ export class ElevatorService {
       // Build the call payload using the areas previously generated
       const destinationCallPayload = {
         type: 'lift-call-api-v2',
-        requestId: String(requestId),
         buildingId: targetBuildingId,
         callType: 'action',
         groupId: targetGroupId,
@@ -1042,26 +1041,80 @@ export class ElevatorService {
       // Send the request
       webSocketConnection.send(JSON.stringify(destinationCallPayload));
 
-      // Wait for ack and call event concurrently, but log ack immediately when it arrives
+      // Wait for ack and call event concurrently.
+      // Attach a catch to the ack promise immediately to avoid unhandled rejections
+      // if the service returns an error response before we await it.
+      let ackError: any | undefined;
       const ackPromise = waitForResponse(
         webSocketConnection,
         String(requestId),
         10,
         true,
-      ).then((ack) => {
-        logIncoming('kone websocket acknowledgement', ack);
-        return ack;
-      });
-      const callEvent = await callEventPromise;
-      const wsResponse = await ackPromise;
+      )
+        .then((ack) => {
+          logIncoming('kone websocket acknowledgement', ack);
+          return ack;
+        })
+        .catch((err) => {
+          // Swallow at creation time to prevent unhandled rejection, but keep the error for later
+          ackError = err;
+          logIncoming('kone websocket acknowledgement error', err);
+          return undefined as unknown as WebSocketResponse;
+        });
 
       const response = new CallElevatorResponseDTO();
-      if (callEvent.data?.success) {
-        response.errcode = 0;
-        response.errmsg = 'SUCCESS';
-        response.sessionId = callEvent.data?.session_id;
-        response.destination = request.toFloor;
-        // Save context for future hold_open calls from the same client
+      try {
+        // Also protect waits with timeouts and allow early exit on ack failure
+        const callEventTimeoutMs = Number(
+          process.env.KONE_CALL_EVENT_TIMEOUT_MS || 15000,
+        );
+
+        // Race ack vs call-event first for early error handling
+        const first = await Promise.race([
+          callEventPromise.then((evt) => ({ kind: 'event' as const, evt })),
+          ackPromise.then(() => ({ kind: 'ack' as const })),
+          new Promise<{ kind: 'timeout' }>((resolve) =>
+            setTimeout(() => resolve({ kind: 'timeout' }), callEventTimeoutMs),
+          ),
+        ]);
+
+        if (first.kind === 'ack' && ackError) {
+          response.errcode = 1;
+          response.errmsg = 'FAILED';
+          return plainToInstance(CallElevatorResponseDTO, response);
+        }
+
+        // Ensure both are completed (if event came first, await ack; if ack came first and ok, await event)
+        let callEvent: any | undefined =
+          first.kind === 'event' ? first.evt : undefined;
+        if (!callEvent) {
+          // Wait remaining time for event
+          const remainingEvent = await Promise.race([
+            callEventPromise,
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error('Call event timeout')),
+                callEventTimeoutMs,
+              ),
+            ),
+          ]);
+          callEvent = remainingEvent;
+        }
+
+        const wsResponse = await ackPromise;
+
+        if (ackError) {
+          response.errcode = 1;
+          response.errmsg = 'FAILED';
+          return plainToInstance(CallElevatorResponseDTO, response);
+        }
+
+        if (callEvent.data?.success) {
+          response.errcode = 0;
+          response.errmsg = 'SUCCESS';
+          response.sessionId = callEvent.data?.session_id;
+          response.destination = request.toFloor;
+          // Save context for future hold_open calls from the same client
         const liftDeck = Array.isArray(allowedLiftAreaIds)
           ? Number(allowedLiftAreaIds[0])
           : NaN;
@@ -1082,21 +1135,27 @@ export class ElevatorService {
             updatedAt: Date.now(),
           },
         );
-      } else {
+        } else {
+          response.errcode = 1;
+          response.errmsg = 'FAILURE';
+        }
+        response.connectionId = (wsResponse as any)?.connectionId;
+        response.requestId = Number((wsResponse as any)?.requestId);
+        response.statusCode = (wsResponse as any)?.statusCode;
+        // Cache successful journey result for idempotency window
+        if (response.errcode === 0) {
+          this.callIdempotencyCache.set(journeyKey, {
+            expiresAt: Date.now() + idempTtlMs,
+            response: plainToInstance(CallElevatorResponseDTO, response),
+          });
+        }
+        return plainToInstance(CallElevatorResponseDTO, response);
+      } catch (err) {
+        console.error('Failed to call elevator', err);
         response.errcode = 1;
-        response.errmsg = 'FAILURE';
+        response.errmsg = 'FAILED';
+        return plainToInstance(CallElevatorResponseDTO, response);
       }
-      response.connectionId = wsResponse.connectionId;
-      response.requestId = Number(wsResponse.requestId);
-      response.statusCode = wsResponse.statusCode;
-      // Cache successful journey result for idempotency window
-      if (response.errcode === 0) {
-        this.callIdempotencyCache.set(journeyKey, {
-          expiresAt: Date.now() + idempTtlMs,
-          response: plainToInstance(CallElevatorResponseDTO, response),
-        });
-      }
-      return plainToInstance(CallElevatorResponseDTO, response);
     } finally {
       try {
         webSocketConnection.close();
@@ -1397,7 +1456,6 @@ export class ElevatorService {
       );
       const actionPayload = {
         type: 'lift-call-api-v2',
-        requestId: String(requestId),
         buildingId,
         groupId: targetGroupId,
         callType: 'action',
@@ -1417,7 +1475,8 @@ export class ElevatorService {
       const wsResponse = await waitForResponse(
         webSocketConnection,
         requestId,
-        
+        10,
+        true        
       );
       logIncoming('kone websocket acknowledgement', wsResponse);
       webSocketConnection.close();
