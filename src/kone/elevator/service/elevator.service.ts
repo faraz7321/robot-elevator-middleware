@@ -58,6 +58,7 @@ export class ElevatorService {
           shortName: string;
           groupSide?: number;
           terminals: number[];
+          groupFloorId?: number;
         }>
       >;
       byArea: Map<
@@ -67,7 +68,18 @@ export class ElevatorService {
           shortName: string;
           groupSide?: number;
           terminals: number[];
+          groupFloorId?: number;
         }
+      >;
+      byGroupFloor: Map<
+        number,
+        Array<{
+          floor: number;
+          areaId: number;
+          shortName: string;
+          groupSide?: number;
+          terminals: number[];
+        }>
       >;
       groupTerminals: number[];
     }
@@ -168,8 +180,16 @@ export class ElevatorService {
     topology?: any,
     groupTerminals?: number[],
     preferredType?: string | string[],
+    allowedTerminals?: number[],
   ): number {
     const map = this.getTerminalMap(buildingId, groupId, topology);
+
+    const allowedList = Array.isArray(allowedTerminals)
+      ? allowedTerminals
+          .map((value) => Number(value))
+          .filter((value) => !isNaN(value))
+      : [];
+    const allowedSet = allowedList.length ? new Set(allowedList) : undefined;
 
     // Normalize preferences. Default to 'virtual' if not provided.
     const prefs: string[] = (
@@ -201,11 +221,25 @@ export class ElevatorService {
       );
     };
 
+    const toNumericArray = (input: any): number[] =>
+      Array.isArray(input)
+        ? input
+            .map((value: any) => Number(value))
+            .filter((value) => !isNaN(value))
+        : [];
+
     // Build candidates for each preferred type in order
-    const entries = Array.from(map.entries()); // [id, type]
-    const groupTermList: number[] = Array.isArray(groupTerminals)
-      ? groupTerminals
-      : (topology as any)?.groups?.[0]?.terminals || [];
+    const allEntries = Array.from(map.entries()); // [id, type]
+    const filteredEntries = allowedSet
+      ? allEntries.filter(([id]) => allowedSet.has(id))
+      : allEntries;
+    const entries = filteredEntries.length ? filteredEntries : allEntries;
+    const baseGroupTerminals = toNumericArray(groupTerminals).length
+      ? toNumericArray(groupTerminals)
+      : toNumericArray((topology as any)?.groups?.[0]?.terminals);
+    const groupTermList = allowedSet
+      ? baseGroupTerminals.filter((value) => allowedSet.has(value))
+      : baseGroupTerminals;
 
     for (const pref of prefs) {
       const idsForType = entries
@@ -231,9 +265,18 @@ export class ElevatorService {
 
     // Fallback to env default or a deterministic first entry
     if (entries.length === 0) {
+      if (allowedList.length) {
+        return allowedList[0];
+      }
       return Number(process.env.KONE_DEFAULT_TERMINAL_ID || 1001);
     }
-    return entries[0][0];
+    const orderedIds = entries.map(([id]) => id);
+    if (allowedList.length) {
+      const allowedMatch = allowedList.find((id) => orderedIds.includes(id));
+      if (typeof allowedMatch === 'number') return allowedMatch;
+      return allowedList[0];
+    }
+    return orderedIds[0];
   }
 
   private formatBuildingId(id: string): string {
@@ -267,12 +310,28 @@ export class ElevatorService {
         shortName: string;
         groupSide?: number;
         terminals: number[];
+        groupFloorId?: number;
       }
+    >();
+    const byGroupFloor = new Map<
+      number,
+      Array<{
+        floor: number;
+        areaId: number;
+        shortName: string;
+        groupSide?: number;
+        terminals: number[];
+      }>
     >();
 
     const parseFloorNum = (name: any): number => {
       const m = String(name ?? '').match(/-?\d+/);
       return m ? parseInt(m[0], 10) : NaN;
+    };
+
+    const extractFloorFromAreaId = (areaId: number): number => {
+      if (typeof areaId !== 'number' || !isFinite(areaId)) return NaN;
+      return Math.trunc(areaId / 1000);
     };
 
     const group =
@@ -293,47 +352,91 @@ export class ElevatorService {
       shortName: string,
       groupSide?: number,
       terminals: number[] = [],
+      groupFloorId?: number,
     ) => {
       if (isNaN(floor) || isNaN(areaId)) return;
       const arr = byFloor.get(floor) || [];
-      const e = { areaId, shortName, groupSide, terminals };
+      const e = { areaId, shortName, groupSide, terminals, groupFloorId };
       arr.push(e);
       byFloor.set(floor, arr);
-      byArea.set(areaId, { floor, shortName, groupSide, terminals });
+      byArea.set(areaId, { floor, shortName, groupSide, terminals, groupFloorId });
+      if (typeof groupFloorId === 'number' && !isNaN(groupFloorId)) {
+        const gfArr = byGroupFloor.get(groupFloorId) || [];
+        gfArr.push({ floor, areaId, shortName, groupSide, terminals });
+        byGroupFloor.set(groupFloorId, gfArr);
+      }
     };
 
     if (Array.isArray(topology?.destinations) && topology.destinations.length) {
       for (const d of topology.destinations) {
-        const floor = parseFloorNum(d?.short_name);
-        const areaId = Number(
-          typeof d?.area_id === 'number'
+        const areaRaw =
+          typeof d?.area_id !== 'undefined' && d?.area_id !== null
             ? d.area_id
-            : String(d?.area_id || '')
-                .split(':')
-                .pop(),
-        );
+            : (d as any)?.areaId;
+        const areaId =
+          areaRaw === undefined || areaRaw === null || areaRaw === ''
+            ? NaN
+            : Number(
+                String(areaRaw)
+                  .split(':')
+                  .pop(),
+              );
+        const groupFloorIdRaw =
+          typeof d?.group_floor_id !== 'undefined'
+            ? d.group_floor_id
+            : (d as any)?.groupFloorId;
+        const groupFloorId = Number(groupFloorIdRaw);
+        let floor = extractFloorFromAreaId(areaId);
+        if (isNaN(floor)) {
+          floor = parseFloorNum((d as any)?.short_name ?? (d as any)?.shortName);
+        }
+        if (isNaN(floor) && !isNaN(groupFloorId)) {
+          floor = groupFloorId;
+        }
         const side =
           typeof d?.group_side === 'number' ? Number(d.group_side) : undefined;
         const terms: number[] = Array.isArray(d?.terminals)
           ? d.terminals.map((t: any) => Number(t)).filter((n: any) => !isNaN(n))
           : [];
-        pushEntry(floor, areaId, String(d?.short_name ?? ''), side, terms);
+        pushEntry(
+          floor,
+          areaId,
+          String((d as any)?.short_name ?? (d as any)?.shortName ?? ''),
+          side,
+          terms,
+          !isNaN(groupFloorId) ? groupFloorId : undefined,
+        );
       }
     }
 
     if (!byFloor.size && Array.isArray(topology?.areas)) {
       for (const a of topology.areas) {
-        const floor = parseFloorNum(a?.shortName);
-        const areaId = Number(
-          String(a?.areaId || '')
-            .split(':')
-            .pop(),
+        const areaRaw =
+          typeof a?.areaId !== 'undefined' && a?.areaId !== null
+            ? a.areaId
+            : (a as any)?.area_id;
+        const areaId =
+          areaRaw === undefined || areaRaw === null || areaRaw === ''
+            ? NaN
+            : Number(
+                String(areaRaw)
+                  .split(':')
+                  .pop(),
+              );
+        let floor = extractFloorFromAreaId(areaId);
+        if (isNaN(floor)) floor = parseFloorNum((a as any)?.shortName);
+        pushEntry(
+          floor,
+          areaId,
+          String((a as any)?.shortName ?? ''),
+          undefined,
+          undefined,
+          undefined,
         );
-        pushEntry(floor, areaId, String(a?.shortName ?? ''));
       }
     }
 
-    entry = { byFloor, byArea, groupTerminals };
+    entry = { byFloor, byArea, byGroupFloor, groupTerminals };
     this.floorAreaCache.set(key, entry);
     return entry;
   }
@@ -575,17 +678,58 @@ export class ElevatorService {
     response.result =
       (topology as any).groups?.flatMap((group: any) => {
         const lifts: any[] = Array.isArray(group?.lifts) ? group.lifts : [];
+        const rawGroupId = group?.groupId ?? group?.group_id ?? groupId;
+        const resolvedGroupId = String(rawGroupId)
+          .split(':')
+          .pop() || String(rawGroupId);
+        const mapping = this.buildFloorAreaMappings(
+          buildingId,
+          resolvedGroupId,
+          topology,
+        );
+        const hasTopologyFloors = mapping.byFloor.size > 0;
         return lifts.map((lift: any) => {
           const liftNo = this.getLiftNumber(lift);
           const floorsArr: any[] = Array.isArray(lift?.floors) ? lift.floors : [];
           const nums = new Set<number>();
           for (const f of floorsArr) {
-            const n = Number(
-              typeof f?.lift_floor_id !== 'undefined'
-                ? f.lift_floor_id
-                : f?.group_floor_id,
+            const groupFloorId = Number(
+              typeof f?.group_floor_id !== 'undefined'
+                ? f.group_floor_id
+                : (f as any)?.groupFloorId,
             );
-            if (isFinite(n)) nums.add(n);
+            let added = false;
+            if (hasTopologyFloors && !isNaN(groupFloorId)) {
+              const entries = mapping.byGroupFloor.get(groupFloorId);
+              if (Array.isArray(entries) && entries.length) {
+                for (const entry of entries) {
+                  if (typeof entry?.floor === 'number' && !isNaN(entry.floor)) {
+                    nums.add(entry.floor);
+                  }
+                }
+                added = true;
+              }
+            }
+            if (!added) {
+              const candidate = Number(
+                typeof f?.lift_floor_id !== 'undefined'
+                  ? f.lift_floor_id
+                  : typeof f?.liftFloorId !== 'undefined'
+                    ? f.liftFloorId
+                    : !isNaN(groupFloorId)
+                      ? groupFloorId
+                      : (f as any)?.floor,
+              );
+              if (isFinite(candidate)) {
+                if (hasTopologyFloors) {
+                  if (mapping.byFloor.has(candidate)) {
+                    nums.add(candidate);
+                  }
+                } else {
+                  nums.add(candidate);
+                }
+              }
+            }
           }
           const sorted = Array.from(nums).sort((a, b) => a - b);
           return {
@@ -917,6 +1061,75 @@ export class ElevatorService {
         // noop — fall back below
       }
 
+      const floorMappingEntry = this.buildFloorAreaMappings(
+        targetBuildingId,
+        targetGroupId,
+        topology,
+      );
+
+      const collectTerminals = (
+        entries:
+          | Array<{
+              terminals: number[];
+            }>
+          | undefined,
+      ): number[] => {
+        if (!Array.isArray(entries)) return [];
+        const seen = new Set<number>();
+        const result: number[] = [];
+        for (const entry of entries) {
+          if (!Array.isArray((entry as any)?.terminals)) continue;
+          for (const value of (entry as any).terminals) {
+            const id = Number(value);
+            if (!isNaN(id) && !seen.has(id)) {
+              seen.add(id);
+              result.push(id);
+            }
+          }
+        }
+        return result;
+      };
+
+      const dedupeNumericList = (values: number[]): number[] => {
+        const seen = new Set<number>();
+        const result: number[] = [];
+        for (const value of values) {
+          const id = Number(value);
+          if (!isNaN(id) && !seen.has(id)) {
+            seen.add(id);
+            result.push(id);
+          }
+        }
+        return result;
+      };
+
+      const fromFloorEntries = floorMappingEntry.byFloor.get(
+        request.fromFloor,
+      );
+      const toFloorEntries = floorMappingEntry.byFloor.get(request.toFloor);
+      const fromFloorTerminals = collectTerminals(fromFloorEntries);
+      const toFloorTerminals = collectTerminals(toFloorEntries);
+
+      let candidateTerminals: number[] = [];
+      if (fromFloorTerminals.length && toFloorTerminals.length) {
+        candidateTerminals = fromFloorTerminals.filter((value) =>
+          toFloorTerminals.includes(value),
+        );
+      }
+      if (!candidateTerminals.length && fromFloorTerminals.length) {
+        candidateTerminals = [...fromFloorTerminals];
+      } else if (!candidateTerminals.length && toFloorTerminals.length) {
+        candidateTerminals = [...toFloorTerminals];
+      }
+      if (
+        !candidateTerminals.length &&
+        Array.isArray(floorMappingEntry.groupTerminals) &&
+        floorMappingEntry.groupTerminals.length
+      ) {
+        candidateTerminals = [...floorMappingEntry.groupTerminals];
+      }
+      candidateTerminals = dedupeNumericList(candidateTerminals);
+
       // Select terminal from config; hardcode preferred type order
       // Prefer Virtual, then LCS, then DOP
       const preferredTypes = [
@@ -924,12 +1137,13 @@ export class ElevatorService {
         // 'lcs'
         //, 'vcs'
       ];
-      const virtualTerminalId = this.pickTerminalId(
+      const selectedTerminalId = this.pickTerminalId(
         targetBuildingId,
         targetGroupId,
         topology,
         (groupObj as any)?.terminals,
         preferredTypes.length ? preferredTypes : undefined,
+        candidateTerminals.length ? candidateTerminals : undefined,
       );
 
       // Resolve areas using robust per-group mapping
@@ -938,15 +1152,27 @@ export class ElevatorService {
         targetGroupId,
         topology,
         request.fromFloor,
-        virtualTerminalId,
+        selectedTerminalId,
       );
       const toArea = this.resolveAreaIdForFloor(
         targetBuildingId,
         targetGroupId,
         topology,
         request.toFloor,
-        virtualTerminalId,
+        selectedTerminalId,
       );
+
+      const terminalSource = candidateTerminals.some((value) =>
+        fromFloorTerminals.includes(value) || toFloorTerminals.includes(value),
+      )
+        ? 'floor-destination'
+        : candidateTerminals.length
+          ? 'group-default'
+          : 'fallback-default';
+      const mappingRuleLabel =
+        terminalSource === 'fallback-default'
+          ? 'validated-destinations-or-rule-fallback'
+          : 'destinations-terminal-aware';
 
       // Build allowed_lifts strictly from the requested liftNo
       let allowedLiftAreaIds: number[] = [];
@@ -970,9 +1196,13 @@ export class ElevatorService {
         toFloor: request.toFloor,
         fromArea: usedFromArea,
         toArea: usedToArea,
-        terminal: virtualTerminalId,
+        terminal: selectedTerminalId,
+        terminalCandidates: candidateTerminals,
+        fromFloorTerminals,
+        toFloorTerminals,
+        terminalSource,
         allowed_lifts: allowedLiftAreaIds,
-        mappingRule: 'validated-destinations-or-rule-fallback',
+        mappingRule: mappingRuleLabel,
       });
 
       // Before placing a call, ensure lift_mode == 0 from `lift_${request.liftNo}/status`
@@ -1085,7 +1315,7 @@ export class ElevatorService {
           request_id: requestId,
           area: usedFromArea, // current floor
           time: new Date().toISOString(),
-          terminal: virtualTerminalId,
+          terminal: selectedTerminalId,
 
           // terminal: 10011,
           call: {
@@ -1177,26 +1407,26 @@ export class ElevatorService {
           response.sessionId = callEvent.data?.session_id;
           response.destination = request.toFloor;
           // Save context for future hold_open calls from the same client
-        const liftDeck = Array.isArray(allowedLiftAreaIds)
-          ? Number(allowedLiftAreaIds[0])
-          : NaN;
-        this.lastDoorHoldContext.set(
-          this.getDoorCtxKey(
-            request.deviceUuid,
-            targetBuildingId,
-            targetGroupId,
-            request.liftNo,
-          ),
-          {
-            buildingId: targetBuildingId,
-            groupId: targetGroupId,
-            liftNo: request.liftNo,
-            servedArea: usedFromArea,
-            liftDeck: isNaN(liftDeck) ? 0 : liftDeck,
-            terminalId: virtualTerminalId,
-            updatedAt: Date.now(),
-          },
-        );
+          const liftDeck = Array.isArray(allowedLiftAreaIds)
+            ? Number(allowedLiftAreaIds[0])
+            : NaN;
+          this.lastDoorHoldContext.set(
+            this.getDoorCtxKey(
+              request.deviceUuid,
+              targetBuildingId,
+              targetGroupId,
+              request.liftNo,
+            ),
+            {
+              buildingId: targetBuildingId,
+              groupId: targetGroupId,
+              liftNo: request.liftNo,
+              servedArea: usedFromArea,
+              liftDeck: isNaN(liftDeck) ? 0 : liftDeck,
+              terminalId: selectedTerminalId,
+              updatedAt: Date.now(),
+            },
+          );
         } else {
           response.errcode = 1;
           response.errmsg = 'FAILURE';

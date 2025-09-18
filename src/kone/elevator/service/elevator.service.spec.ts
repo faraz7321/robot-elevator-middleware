@@ -72,6 +72,13 @@ describe('ElevatorService callElevator', () => {
               };
               setTimeout(() => ws.handler?.(JSON.stringify(res)), 0);
             }
+            if (parsed?.callType === 'monitor') {
+              const status = {
+                callType: 'monitor-lift-status',
+                data: { lift_mode: 0 },
+              };
+              setTimeout(() => ws.handler?.(JSON.stringify(status)), 0);
+            }
             if (parsed?.callType === 'action') {
               const res = {
                 callType: 'action',
@@ -104,11 +111,71 @@ describe('ElevatorService callElevator', () => {
     expect(res.destination).toBe(5);
     expect(res.connectionId).toBe('conn-123');
     expect(res.requestId).toBe(123);
-    const sendArg = (openWebSocketConnection as jest.Mock).mock.results[0].value
-      .send.mock.calls[1][0];
-    const sent = JSON.parse(sendArg);
-    expect(sent.payload.area).toBe(1000);
-    expect(sent.payload.call.destination).toBe(5000);
+    const sendCalls = (openWebSocketConnection as jest.Mock).mock.results[0]
+      .value.send.mock.calls.map((c) => JSON.parse(c[0]));
+    const actionPayload = sendCalls.find((p: any) => p?.callType === 'action');
+    expect(actionPayload).toBeDefined();
+    expect(actionPayload?.payload?.area).toBe(1000);
+    expect(actionPayload?.payload?.call?.destination).toBe(5000);
+  });
+
+  it('uses floor-specific terminal mapping when available', async () => {
+    (fetchBuildingTopology as jest.Mock).mockResolvedValueOnce({
+      groups: [
+        {
+          groupId: 'gid:1',
+          terminals: [10011, 10012],
+          lifts: [
+            {
+              liftId: 'lift:1',
+              decks: [
+                {
+                  deck: 0,
+                  area_id: 1001010,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      destinations: [
+        {
+          area_id: 1010,
+          short_name: '1R',
+          group_floor_id: 1,
+          group_side: 2,
+          terminals: [10012],
+        },
+        {
+          area_id: 6010,
+          short_name: '5R',
+          group_floor_id: 6,
+          group_side: 2,
+          terminals: [10012],
+        },
+      ],
+      terminals: [
+        { terminal_id: 10011, type: 'LCS' },
+        { terminal_id: 10012, type: 'Virtual' },
+      ],
+    });
+
+    const req = new CallElevatorRequestDTO();
+    req.placeId = 'b1';
+    req.liftNo = 1;
+    req.fromFloor = 1;
+    req.toFloor = 6;
+
+    const res = await service.callElevator(req);
+    expect(res.errcode).toBe(0);
+
+    const wsMock = openWebSocketConnection as jest.Mock;
+    const ws = wsMock.mock.results[wsMock.mock.results.length - 1].value;
+    const payloads = ws.send.mock.calls.map((c: any) => JSON.parse(c[0]));
+    const actionPayload = payloads.find((p: any) => p.callType === 'action');
+    expect(actionPayload?.payload?.terminal).toBe(10012);
+    expect(actionPayload?.payload?.area).toBe(1010);
+    expect(actionPayload?.payload?.call?.destination).toBe(6010);
   });
 
   it('does not depend on operational mode check in call flow', async () => {
@@ -386,6 +453,48 @@ describe('ElevatorService listElevators', () => {
     expect(res.result[0]).toEqual({
       liftNo: 7,
       accessibleFloors: '1,8',
+      bindingStatus: '11',
+    });
+  });
+
+  it('derives floor numbers from area ids and excludes missing destinations', async () => {
+    (fetchBuildingTopology as jest.Mock).mockResolvedValueOnce({
+      groups: [
+        {
+          groupId: 'gid:2',
+          lifts: [
+            {
+              lift_id: 1,
+              floors: [
+                { group_floor_id: 1 },
+                { group_floor_id: 2 },
+                { group_floor_id: 3 },
+                { group_floor_id: 4 },
+                { group_floor_id: 5 },
+                { group_floor_id: 6 },
+                { group_floor_id: 7 },
+              ],
+            },
+          ],
+        },
+      ],
+      destinations: [
+        { group_floor_id: 1, area_id: 1010, short_name: '0R' },
+        { group_floor_id: 3, area_id: 3010, short_name: '2R' },
+        { group_floor_id: 4, area_id: 4010, short_name: '3R' },
+        { group_floor_id: 5, area_id: 5000, short_name: '4' },
+        { group_floor_id: 6, area_id: 6010, short_name: '5R' },
+        { group_floor_id: 7, area_id: 7000, short_name: '6' },
+      ],
+    });
+
+    const req = { placeId: 'b2:2' } as any;
+
+    const res = await service.listElevators(req);
+
+    expect(res.result[0]).toEqual({
+      liftNo: 1,
+      accessibleFloors: '1,3,4,5,6,7',
       bindingStatus: '11',
     });
   });
