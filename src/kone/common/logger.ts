@@ -1,6 +1,6 @@
-import { Logger } from '@nestjs/common';
+import { appLogger } from '../../logger/gcp-logger.service';
 
-const logger = new Logger('Middleware');
+const logger = appLogger.forContext('Middleware');
 
 const SENSITIVE_KEYS = [
   'sign',
@@ -34,9 +34,17 @@ export function sanitize<T>(value: T): T {
 }
 
 export function logIncoming(source: string, data: unknown): void {
-  logger.log(`Incoming ${source}: ${JSON.stringify(sanitize(data))}`);
+  logger.log({
+    direction: 'incoming',
+    source,
+    payload: sanitize(data),
+  });
 }
 
 export function logOutgoing(target: string, data: unknown): void {
-  logger.log(`Outgoing ${target}: ${JSON.stringify(sanitize(data))}`);
+  logger.log({
+    direction: 'outgoing',
+    target,
+    payload: sanitize(data),
+  });
 }

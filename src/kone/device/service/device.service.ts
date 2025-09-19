@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { RegisterDeviceRequestDTO } from '../dto/register/RegisterDeviceRequestDTO';
 import { RegisterDeviceResponseDTO } from '../dto/register/RegisterDeviceResponseDTO';
 import { BindDeviceRequestDTO } from '../dto/bind/BindDeviceRequestDTO';
@@ -7,10 +7,11 @@ import { RegisterDeviceResultDTO } from '../dto/register/RegisterDeviceResultDTO
 import { randomBytes, createHash } from 'crypto';
 import { BindDeviceResultDTO } from '../dto/bind/BindDeviceResultDTO';
 import { DeviceRegistryRepository } from '../repository/device-registry.repository';
+import { appLogger } from '../../../logger/gcp-logger.service';
 
 @Injectable()
 export class DeviceService {
-  private readonly logger = new Logger(DeviceService.name);
+  private readonly logger = appLogger.forContext(DeviceService.name);
   private deviceRegistry = new Map<
     string,
     { deviceSecret: string; deviceMac: string }
@@ -39,7 +40,10 @@ export class DeviceService {
     this.logger.log(
       `Requested: /openapi/v5/device/register on ${new Date().toISOString()}`,
     );
-    this.logger.debug(request);
+    this.logger.debug({
+      deviceUuid: request.deviceUuid,
+      deviceMac: this.normalizeMac(request.deviceMac),
+    });
 
     const response = new RegisterDeviceResponseDTO();
     const deviceUuid = request.deviceUuid;
@@ -163,13 +167,17 @@ export class DeviceService {
   }
 
   bindDevice(request: BindDeviceRequestDTO): BindDeviceResponseDTO {
+    const { deviceUuid, liftNos = [] } = request;
+
     this.logger.log(
       `Requested: /openapi/v5/device/binding on ${new Date().toISOString()}`,
     );
-    this.logger.debug(request);
+    this.logger.debug({
+      deviceUuid,
+      liftNos,
+    });
 
     const response = new BindDeviceResponseDTO();
-    const { deviceUuid, liftNos = [] } = request;
     const liftsToBind = liftNos.length > 0 ? liftNos : this.getAllLiftNumbers();
 
     if (!this.deviceBindings.has(deviceUuid)) {
@@ -191,14 +199,18 @@ export class DeviceService {
   }
 
   unbindDevice(request: BindDeviceRequestDTO): BindDeviceResponseDTO {
+    const { deviceUuid, liftNos = [] } = request;
+
     this.logger.log(
       `Requested: /openapi/v5/device/unbinding on ${new Date().toISOString()}`,
     );
-    this.logger.debug(request);
+    this.logger.debug({
+      deviceUuid,
+      liftNos,
+    });
 
     const response = new BindDeviceResponseDTO();
 
-    const { deviceUuid, liftNos = [] } = request;
     const liftsToUnbind =
       liftNos.length > 0 ? liftNos : this.getAllLiftNumbers();
 

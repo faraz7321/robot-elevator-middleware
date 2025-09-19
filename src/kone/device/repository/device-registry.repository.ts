@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Datastore, Key } from '@google-cloud/datastore';
+import { appLogger } from '../../../logger/gcp-logger.service';
 
 export interface DeviceRegistryRecord {
   deviceUuid: string;
@@ -11,7 +12,7 @@ export interface DeviceRegistryRecord {
 
 @Injectable()
 export class DeviceRegistryRepository {
-  private readonly logger = new Logger(DeviceRegistryRepository.name);
+  private readonly logger = appLogger.forContext(DeviceRegistryRepository.name);
   private readonly datastore: Datastore;
   private readonly kind: string;
 
@@ -59,7 +60,8 @@ export class DeviceRegistryRepository {
       return this.mapEntity(entity, key);
     } catch (error) {
       this.logger.error(
-        `Failed to load device registry entry for UUID ${deviceUuid}: ${error}`,
+        `Failed to load device registry entry for UUID ${deviceUuid}`,
+        error instanceof Error ? error.stack : undefined,
       );
       throw error;
     }
@@ -80,7 +82,8 @@ export class DeviceRegistryRepository {
       return this.mapEntity(entity, entity[Datastore.KEY]);
     } catch (error) {
       this.logger.error(
-        `Failed to load device registry entry for MAC ${deviceMac}: ${error}`,
+        `Failed to load device registry entry for MAC ${deviceMac}`,
+        error instanceof Error ? error.stack : undefined,
       );
       throw error;
     }
@@ -117,7 +120,8 @@ export class DeviceRegistryRepository {
       return entity;
     } catch (error) {
       this.logger.error(
-        `Failed to persist device registry entry for UUID ${record.deviceUuid}: ${error}`,
+        `Failed to persist device registry entry for UUID ${record.deviceUuid}`,
+        error instanceof Error ? error.stack : undefined,
       );
       await transaction.rollback().catch(() => undefined);
       throw error;
