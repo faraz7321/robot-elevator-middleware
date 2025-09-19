@@ -23,7 +23,7 @@ import {
   BuildingTopology,
   WebSocketResponse,
 } from '../../common/types';
-import { logIncoming, logOutgoing } from '../../common/logger';
+import { logIncoming, logOutgoing } from '../../../logger/gcp-logger.service';
 import { v4 as uuidv4 } from 'uuid';
 import WebSocket from 'ws';
 

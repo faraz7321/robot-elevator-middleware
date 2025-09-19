@@ -3,7 +3,7 @@ import querystring from 'querystring';
 import WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import _ from 'lodash';
-import { logIncoming, logOutgoing } from './logger';
+import { logIncoming, logOutgoing } from '../../logger/gcp-logger.service';
 
 import {
   BuildingTopology,

@@ -29,13 +29,63 @@ const levelToSeverity: Record<LogLevel, Severity> = {
   fatal: 'CRITICAL',
 };
 
-interface LogPayload {
-  severity: Severity;
-  timestamp: string;
-  message?: string;
-  context?: string;
-  stack?: string;
-  data?: Record<string, unknown>;
+const SENSITIVE_KEYS = [
+  'sign',
+  'check',
+  'access_token',
+  'refresh_token',
+  'token',
+  'accesstoken',
+  'client_secret',
+  'clientid',
+  'authorization',
+];
+
+function sanitizeValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((v) => sanitizeValue(v));
+  }
+  if (value !== null && typeof value === 'object') {
+    const sanitized: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      if (SENSITIVE_KEYS.includes(key.toLowerCase())) continue;
+      sanitized[key] = sanitizeValue(val);
+    }
+    return sanitized;
+  }
+  return value;
+}
+
+export function sanitize<T>(value: T): T {
+  return sanitizeValue(value) as T;
+}
+
+function deriveContext(source: string, override?: string): string {
+  if (override) return override;
+
+  const tokens = source
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1));
+
+  if (tokens.length === 0) {
+    return 'Middleware.UnknownSource';
+  }
+
+  return `Middleware.${tokens.join('')}`;
+}
+
+function formatPayload(value: unknown): string {
+  const sanitized = sanitize(value);
+  if (
+    sanitized === null ||
+    typeof sanitized === 'string' ||
+    typeof sanitized === 'number' ||
+    typeof sanitized === 'boolean'
+  ) {
+    return String(sanitized);
+  }
+  return inspect(sanitized, { depth: 5, breakLength: Infinity });
 }
 
 export class GcpLogger implements LoggerService {
@@ -97,44 +147,31 @@ export class GcpLogger implements LoggerService {
       return;
     }
 
-    const payload: LogPayload = {
-      severity: levelToSeverity[level],
-      timestamp: new Date().toISOString(),
-    };
-
-    if (context) {
-      payload.context = context;
-    }
-
-    const normalized = this.normalizeMessage(message);
-    if (normalized.message) {
-      payload.message = normalized.message;
-    }
-    if (normalized.data) {
-      payload.data = normalized.data;
-    }
-
+    const timestamp = new Date().toISOString();
+    const severity = levelToSeverity[level];
     const derivedTrace = this.extractStack(message) ?? trace;
+    const normalized = this.normalizeMessage(message);
+
+    const parts: string[] = [`[${timestamp}]`, severity];
+    if (context) {
+      parts.push(`[${context}]`);
+    }
+    if (normalized.message) {
+      parts.push(normalized.message);
+    }
+    if (normalized.details) {
+      parts.push(`| ${normalized.details}`);
+    }
     if (derivedTrace) {
-      payload.stack = derivedTrace;
+      parts.push(`| trace: ${derivedTrace}`);
     }
 
-    try {
-      console.log(JSON.stringify(payload));
-    } catch (error) {
-      const fallback: LogPayload = {
-        severity: 'ERROR',
-        timestamp: payload.timestamp,
-        message: `Failed to serialize log payload: ${String(error)}`,
-        context,
-      };
-      console.log(JSON.stringify(fallback));
-    }
+    console.log(parts.join(' '));
   }
 
   private normalizeMessage(
     message: any,
-  ): { message?: string; data?: Record<string, unknown> } {
+  ): { message?: string; details?: string } {
     if (message === undefined) {
       return {};
     }
@@ -142,9 +179,7 @@ export class GcpLogger implements LoggerService {
     if (message instanceof Error) {
       return {
         message: message.message,
-        data: {
-          name: message.name,
-        },
+        details: `error: ${message.name}`,
       };
     }
 
@@ -152,17 +187,28 @@ export class GcpLogger implements LoggerService {
       return { message };
     }
 
-    if (typeof message === 'object') {
-      try {
-        const clone = JSON.parse(JSON.stringify(message));
+    if (typeof message === 'object' && message !== null) {
+      const structured = message as Record<string, unknown>;
+
+      if ('message' in structured) {
+        const { message: innerMessage, ...rest } = structured;
+        const msg =
+          typeof innerMessage === 'string'
+            ? innerMessage
+            : inspect(innerMessage, { depth: 5, breakLength: Infinity });
+        const detailKeys = Object.keys(rest);
+        if (detailKeys.length === 0) {
+          return { message: msg };
+        }
         return {
-          data: clone,
-        };
-      } catch {
-        return {
-          message: inspect(message, { depth: 5, breakLength: Infinity }),
+          message: msg,
+          details: this.stringifyDetails(rest),
         };
       }
+
+      return {
+        message: this.stringifyDetails(structured),
+      };
     }
 
     return { message: String(message) };
@@ -174,6 +220,42 @@ export class GcpLogger implements LoggerService {
     }
     return undefined;
   }
+
+  private stringifyDetails(value: Record<string, unknown>): string {
+    return inspect(value, { depth: 5, breakLength: Infinity });
+  }
 }
 
 export const appLogger = new GcpLogger();
+
+function emitLog(
+  direction: 'incoming' | 'outgoing',
+  peer: string,
+  data: unknown,
+  context?: string,
+): void {
+  const resolvedContext = deriveContext(peer, context);
+  const payloadText = formatPayload(data);
+  const messagePrefix =
+    direction === 'incoming'
+      ? `Incoming payload from ${peer}`
+      : `Outgoing payload to ${peer}`;
+
+  appLogger.log(`${messagePrefix}: ${payloadText}`, resolvedContext);
+}
+
+export function logIncoming(
+  source: string,
+  data: unknown,
+  context?: string,
+): void {
+  emitLog('incoming', source, data, context);
+}
+
+export function logOutgoing(
+  target: string,
+  data: unknown,
+  context?: string,
+): void {
+  emitLog('outgoing', target, data, context);
+}

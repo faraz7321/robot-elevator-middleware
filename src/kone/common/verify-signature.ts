@@ -1,8 +1,11 @@
 import * as crypto from 'crypto';
 import { UnauthorizedException } from '@nestjs/common';
 import * as dotenv from 'dotenv';
+import { appLogger } from '../../logger/gcp-logger.service';
 
 dotenv.config();
+
+const logger = appLogger.forContext('SignatureVerifier');
 function md5(str: string): string {
   return crypto.createHash('md5').update(str).digest('hex');
 }
@@ -50,19 +53,20 @@ export function isValidRequest(
   const { sign, check, ts, appname, deviceUuid } = request;
 
   if (!sign || !ts || !appname || !deviceUuid || !appSecret) {
-    console.warn('Missing required fields or secrets');
+    logger.warn({
+      message: 'Rejected request: missing required fields or secrets',
+      receivedKeys: Object.keys(request ?? {}),
+      hasAppSecret: Boolean(appSecret),
+    });
     return false;
   }
 
   if (appname !== ELEVATOR_APP_NAME) {
-    console.warn(`Blocked: appname '${appname}' is not allowed`);
-
-    console.log(
-      'EXPECTED APP_NAME HEX:',
-      Buffer.from(ELEVATOR_APP_NAME || '').toString('hex'),
-    );
-    console.log('RECEIVED appname HEX:', Buffer.from(appname).toString('hex'));
-
+    logger.warn({
+      message: `Blocked request: appname '${appname}' is not allowed`,
+      expectedAppNameHex: Buffer.from(ELEVATOR_APP_NAME || '').toString('hex'),
+      receivedAppNameHex: Buffer.from(appname).toString('hex'),
+    });
     return false;
   }
 
@@ -70,7 +74,7 @@ export function isValidRequest(
 
   if (deviceSecret) {
     if (!check) {
-      console.warn('Missing check field in request');
+      logger.warn('Rejected request: missing check field while device secret available');
       return false;
     }
     const calculatedCheck = generateCheck(deviceUuid, ts, deviceSecret);

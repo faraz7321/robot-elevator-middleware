@@ -12,7 +12,7 @@ import { validateSignedRequest } from '../../common/verify-signature';
 import { DeviceService } from '../../device/service/device.service';
 import * as dotenv from 'dotenv';
 import { CallElevatorResponseDTO } from '../dtos/call/CallElevatorResponseDTO';
-import { logIncoming, logOutgoing } from '../../common/logger';
+import { logIncoming, logOutgoing } from '../../../logger/gcp-logger.service';
 dotenv.config();
 
 @Controller('lift')
