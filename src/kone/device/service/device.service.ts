@@ -399,12 +399,15 @@ export class DeviceService {
       Array.isArray(entry) ? entry : [entry],
     );
 
-    response.result = normalizedResults;
     const hasFailure = normalizedResults.some(
       ({ bindingStatus }) => !successStatuses.has(bindingStatus),
     );
 
     response.errcode = hasFailure ? 1 : 0;
     response.errmsg = hasFailure ? failureMessage : 'SUCCESS';
+    response.result =
+      normalizedResults.length === 1
+        ? normalizedResults[0]
+        : normalizedResults;
   }
 }

@@ -36,9 +36,9 @@ describe('DeviceService bindings', () => {
 
     expect(response.errcode).toBe(0);
     expect(response.errmsg).toBe('SUCCESS');
-    expect(response.result).toEqual([
+    expect(response.result).toEqual(
       expect.objectContaining({ liftNo: 1, bindingStatus: '11' }),
-    ]);
+    );
   });
 
   it('returns success errcode and errmsg when unbinding without prior binding', async () => {
@@ -50,9 +50,9 @@ describe('DeviceService bindings', () => {
 
     expect(response.errcode).toBe(0);
     expect(response.errmsg).toBe('SUCCESS');
-    expect(response.result).toEqual([
+    expect(response.result).toEqual(
       expect.objectContaining({ liftNo: 1, bindingStatus: '00' }),
-    ]);
+    );
   });
 
   it('marks errcode and errmsg as failure when any bind result is not successful', () => {
@@ -83,9 +83,9 @@ describe('DeviceService bindings', () => {
 
     expect(response.errcode).toBe(1);
     expect(response.errmsg).toBe('NOT_AUTHORIZED');
-    expect(response.result).toEqual([
+    expect(response.result).toEqual(
       expect.objectContaining({ liftNo: 999, bindingStatus: '-1' }),
-    ]);
+    );
   });
 
   it('returns unauthorized status when unbinding lift outside entitlement', async () => {
@@ -97,9 +97,9 @@ describe('DeviceService bindings', () => {
 
     expect(response.errcode).toBe(1);
     expect(response.errmsg).toBe('NOT_AUTHORIZED');
-    expect(response.result).toEqual([
+    expect(response.result).toEqual(
       expect.objectContaining({ liftNo: 999, bindingStatus: '-1' }),
-    ]);
+    );
   });
 
   it('keeps errcode success when all unbind results are successful', () => {
