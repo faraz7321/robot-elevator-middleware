@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { RegisterDeviceRequestDTO } from '../dto/register/RegisterDeviceRequestDTO';
 import { RegisterDeviceResponseDTO } from '../dto/register/RegisterDeviceResponseDTO';
 import { BindDeviceRequestDTO } from '../dto/bind/BindDeviceRequestDTO';
@@ -6,31 +6,81 @@ import { BindDeviceResponseDTO } from '../dto/bind/BindDeviceResponseDTO';
 import { RegisterDeviceResultDTO } from '../dto/register/RegisterDeviceResultDTO';
 import { randomBytes, createHash } from 'crypto';
 import { BindDeviceResultDTO } from '../dto/bind/BindDeviceResultDTO';
+import { DeviceRegistryRepository } from '../repository/device-registry.repository';
 
 @Injectable()
 export class DeviceService {
-  //map devices
+  private readonly logger = new Logger(DeviceService.name);
   private deviceRegistry = new Map<
     string,
     { deviceSecret: string; deviceMac: string }
   >();
   private deviceBindings = new Map<string, Set<number>>();
 
-  registerDevice(request: RegisterDeviceRequestDTO): RegisterDeviceResponseDTO {
-    console.log(
-      'Requested: /openapi/v5/device/register on ' +
-        new Date().toISOString() +
-        '\n',
-      request,
+  constructor(
+    private readonly deviceRegistryRepository: DeviceRegistryRepository,
+  ) {}
+
+  private normalizeMac(deviceMac: string): string {
+    return deviceMac.toUpperCase();
+  }
+
+  private cacheDevice(
+    deviceUuid: string,
+    deviceMac: string,
+    deviceSecret: string,
+  ): void {
+    this.deviceRegistry.set(deviceUuid, { deviceMac, deviceSecret });
+  }
+
+  async registerDevice(
+    request: RegisterDeviceRequestDTO,
+  ): Promise<RegisterDeviceResponseDTO> {
+    this.logger.log(
+      `Requested: /openapi/v5/device/register on ${new Date().toISOString()}`,
     );
+    this.logger.debug(request);
 
     const response = new RegisterDeviceResponseDTO();
+    const deviceUuid = request.deviceUuid;
+    const normalizedMac = this.normalizeMac(request.deviceMac);
 
-    // Check if already registered
-    if (this.deviceRegistry.has(request.deviceUuid)) {
-      const existing = this.deviceRegistry.get(request.deviceUuid)!;
+    const cached = this.deviceRegistry.get(deviceUuid);
+    if (cached) {
+      if (this.normalizeMac(cached.deviceMac) !== normalizedMac) {
+        response.errcode = 1;
+        response.errmsg =
+          'Device UUID already registered with a different MAC address';
+        return response;
+      }
+
       response.result = {
-        deviceUuid: request.deviceUuid,
+        deviceUuid,
+        deviceMac: cached.deviceMac,
+        deviceSecret: cached.deviceSecret,
+      };
+      response.errcode = 0;
+      response.errmsg = 'SUCCESS';
+      return response;
+    }
+
+    const existing = await this.deviceRegistryRepository.findByUuid(deviceUuid);
+    if (existing) {
+      if (this.normalizeMac(existing.deviceMac) !== normalizedMac) {
+        response.errcode = 1;
+        response.errmsg =
+          'Device UUID already registered with a different MAC address';
+        return response;
+      }
+
+      this.cacheDevice(
+        existing.deviceUuid,
+        existing.deviceMac,
+        existing.deviceSecret,
+      );
+
+      response.result = {
+        deviceUuid: existing.deviceUuid,
         deviceMac: existing.deviceMac,
         deviceSecret: existing.deviceSecret,
       };
@@ -38,20 +88,30 @@ export class DeviceService {
       response.errmsg = 'SUCCESS';
       return response;
     }
-    // Generate device secret (24-char hex)
-    const rawSecret = randomBytes(12).toString('hex');
-    const deviceSecret = createHash('sha256').update(rawSecret).digest('hex');
 
-    // Store hashed secret in memory
-    this.deviceRegistry.set(request.deviceUuid, {
+    const conflictingMac = await this.deviceRegistryRepository.findByMac(
+      normalizedMac,
+    );
+    if (conflictingMac && conflictingMac.deviceUuid !== deviceUuid) {
+      response.errcode = 1;
+      response.errmsg = 'Device MAC already registered with a different UUID';
+      return response;
+    }
+
+    const deviceSecret = this.generateSecret(deviceUuid, normalizedMac);
+
+    const stored = await this.deviceRegistryRepository.save({
+      deviceUuid,
+      deviceMac: normalizedMac,
       deviceSecret,
-      deviceMac: request.deviceMac,
     });
 
+    this.cacheDevice(deviceUuid, stored.deviceMac, stored.deviceSecret);
+
     const result: RegisterDeviceResultDTO = {
-      deviceUuid: request.deviceUuid,
-      deviceMac: request.deviceMac,
-      deviceSecret,
+      deviceUuid,
+      deviceMac: stored.deviceMac,
+      deviceSecret: stored.deviceSecret,
     };
 
     response.result = result;
@@ -60,8 +120,30 @@ export class DeviceService {
     return response;
   }
 
-  getDeviceSecret(deviceUuid: string): string | undefined {
-    return this.deviceRegistry.get(deviceUuid)?.deviceSecret;
+  private generateSecret(deviceUuid: string, deviceMac: string): string {
+    const rawSecret = randomBytes(12).toString('hex');
+    return createHash('sha256')
+      .update(`${deviceUuid}:${deviceMac}:${rawSecret}`)
+      .digest('hex');
+  }
+
+  async getDeviceSecret(deviceUuid: string): Promise<string | undefined> {
+    const cached = this.deviceRegistry.get(deviceUuid);
+    if (cached) {
+      return cached.deviceSecret;
+    }
+
+    const existing = await this.deviceRegistryRepository.findByUuid(deviceUuid);
+    if (!existing) {
+      return undefined;
+    }
+
+    this.cacheDevice(
+      existing.deviceUuid,
+      existing.deviceMac,
+      existing.deviceSecret,
+    );
+    return existing.deviceSecret;
   }
 
   /**
@@ -81,12 +163,10 @@ export class DeviceService {
   }
 
   bindDevice(request: BindDeviceRequestDTO): BindDeviceResponseDTO {
-    console.log(
-      'Requested: /openapi/v5/device/binding on ' +
-        new Date().toISOString() +
-        '\n',
-      request,
+    this.logger.log(
+      `Requested: /openapi/v5/device/binding on ${new Date().toISOString()}`,
     );
+    this.logger.debug(request);
 
     const response = new BindDeviceResponseDTO();
     const { deviceUuid, liftNos = [] } = request;
@@ -102,7 +182,7 @@ export class DeviceService {
       bound.add(liftNo);
       return {
         liftNo,
-        bindingStatus: '01', // means "Bound"
+        bindingStatus: '01',
       };
     });
     response.result = results;
@@ -111,12 +191,10 @@ export class DeviceService {
   }
 
   unbindDevice(request: BindDeviceRequestDTO): BindDeviceResponseDTO {
-    console.log(
-      'Requested: /openapi/v5/device/unbinding on ' +
-        new Date().toISOString() +
-        '\n',
-      request,
+    this.logger.log(
+      `Requested: /openapi/v5/device/unbinding on ${new Date().toISOString()}`,
     );
+    this.logger.debug(request);
 
     const response = new BindDeviceResponseDTO();
 
@@ -125,10 +203,9 @@ export class DeviceService {
       liftNos.length > 0 ? liftNos : this.getAllLiftNumbers();
 
     if (!this.deviceBindings.has(deviceUuid)) {
-      // No bindings exist yet, but still respond with unbind results
       const results: BindDeviceResultDTO[] = liftsToUnbind.map((liftNo) => ({
         liftNo,
-        bindingStatus: '00', // Not bound (Unbound)
+        bindingStatus: '00',
       }));
       response.result = results;
       return response;
@@ -140,7 +217,7 @@ export class DeviceService {
       bound.delete(liftNo);
       return {
         liftNo,
-        bindingStatus: '00', // Unbound
+        bindingStatus: '00',
       };
     });
 
@@ -149,7 +226,6 @@ export class DeviceService {
   }
 
   private getAllLiftNumbers(): number[] {
-    // You can return all known liftNos here or load from config/db
-    return [258742, 123]; // example fallback if liftNos is empty
+    return [258742, 123];
   }
 }

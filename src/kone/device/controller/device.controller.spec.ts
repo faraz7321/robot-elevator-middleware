@@ -65,7 +65,7 @@ describe('DeviceController', () => {
     registerDevice: jest.fn(),
     bindDevice: jest.fn(),
     unbindDevice: jest.fn(),
-    getDeviceSecret: jest.fn().mockReturnValue(deviceSecret),
+    getDeviceSecret: jest.fn().mockResolvedValue(deviceSecret),
   } as Record<string, any>;
 
   beforeAll(async () => {
@@ -79,7 +79,7 @@ describe('DeviceController', () => {
   });
 
   beforeEach(() => {
-    deviceService.getDeviceSecret.mockReturnValue(deviceSecret);
+    deviceService.getDeviceSecret.mockResolvedValue(deviceSecret);
   });
 
   afterEach(() => {
@@ -97,7 +97,7 @@ describe('DeviceController', () => {
     //const check = generateCheck(deviceUuid, ts, deviceSecret);
     const req = { ...body, sign };
     const res = { result: 'registered' };
-    deviceService.registerDevice.mockReturnValue(res);
+    deviceService.registerDevice.mockResolvedValue(res);
 
     const response = await request(app.getHttpServer())
       .post('/device/register')
