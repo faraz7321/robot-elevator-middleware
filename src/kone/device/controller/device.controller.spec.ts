@@ -117,7 +117,7 @@ describe('DeviceController', () => {
     const check = generateCheck(deviceUuid, ts, deviceSecret);
     const req = { ...body, sign, check };
     const res = { result: 'bound' };
-    deviceService.bindDevice.mockReturnValue(res);
+    deviceService.bindDevice.mockResolvedValue(res);
 
     const response = await request(app.getHttpServer())
       .post('/device/binding')
@@ -137,7 +137,7 @@ describe('DeviceController', () => {
     const check = generateCheck(deviceUuid, ts, deviceSecret);
     const req = { ...body, sign, check };
     const res = { result: 'unbound' };
-    deviceService.unbindDevice.mockReturnValue(res);
+    deviceService.unbindDevice.mockResolvedValue(res);
 
     const response = await request(app.getHttpServer())
       .post('/device/unbinding')

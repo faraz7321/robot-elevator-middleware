@@ -15,6 +15,7 @@ import {
   openWebSocketConnection,
   waitForResponse,
 } from '../../common/koneapi';
+import { getLiftNumber } from '../utils/lift-utils';
 import { plainToInstance } from 'class-transformer';
 import { AccessTokenService } from '../../auth/service/accessToken.service';
 import { DeviceService } from '../../device/service/device.service';
@@ -487,22 +488,6 @@ export class ElevatorService {
     return this.mapFloorToAreaByRule(floor, groupId);
   }
 
-  private getLiftNumber(lift: any): number {
-    if (lift == null) return NaN;
-    const direct = lift.lift_id ?? lift.liftNo ?? lift.id;
-    if (typeof direct !== 'undefined') {
-      const n = Number(direct);
-      if (!isNaN(n)) return n;
-    }
-    const raw = lift.liftId ?? lift.lift_id_str ?? lift.identifier;
-    if (raw != null) {
-      const tail = String(raw).split(':').pop();
-      const n = Number(tail);
-      if (!isNaN(n)) return n;
-    }
-    return NaN;
-  }
-
   // Parses robot request placeId into KONE buildingId and groupId
   // Accepts formats like:
   // - "building:123456" (no group -> defaults to '1')
@@ -689,7 +674,7 @@ export class ElevatorService {
         );
         const hasTopologyFloors = mapping.byFloor.size > 0;
         return lifts.map((lift: any) => {
-          const liftNo = this.getLiftNumber(lift);
+        const liftNo = getLiftNumber(lift);
           const floorsArr: any[] = Array.isArray(lift?.floors) ? lift.floors : [];
           const nums = new Set<number>();
           for (const f of floorsArr) {
@@ -1517,7 +1502,7 @@ export class ElevatorService {
             servedArea || this.mapFloorToAreaByRule(0, targetGroupId);
           // For lift deck, pick first deck's area id number if available
           const lift = (topology as any)?.groups?.[0]?.lifts?.find(
-            (l: any) => this.getLiftNumber(l) === request.liftNo,
+          (l: any) => getLiftNumber(l) === request.liftNo,
           );
           const d0 = lift?.decks?.[0];
           const deckAreaNum = Number(
@@ -1735,7 +1720,7 @@ export class ElevatorService {
       const group = topology.groups?.[0];
       const targetGroupId = groupId;
       const lift = group?.lifts?.find(
-        (l: any) => this.getLiftNumber(l) === request.liftNo,
+        (l: any) => getLiftNumber(l) === request.liftNo,
       );
       const area = lift?.floors?.[0]?.areasServed?.[0] || 0;
 
