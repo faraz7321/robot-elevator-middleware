@@ -1,10 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import {
-  Firestore,
-  CollectionReference,
-  DocumentData,
-  QueryDocumentSnapshot,
-} from '@google-cloud/firestore';
+import { Datastore, Key } from '@google-cloud/datastore';
 
 export interface DeviceRegistryRecord {
   deviceUuid: string;
@@ -17,8 +12,8 @@ export interface DeviceRegistryRecord {
 @Injectable()
 export class DeviceRegistryRepository {
   private readonly logger = new Logger(DeviceRegistryRepository.name);
-  private readonly firestore: Firestore;
-  private readonly collection: CollectionReference<DocumentData>;
+  private readonly datastore: Datastore;
+  private readonly kind: string;
 
   constructor() {
     const projectId =
@@ -26,59 +21,42 @@ export class DeviceRegistryRepository {
       process.env.GCLOUD_PROJECT ||
       process.env.GOOGLE_CLOUD_PROJECT;
 
-    const options: ConstructorParameters<typeof Firestore>[0] = {};
+    const options: ConstructorParameters<typeof Datastore>[0] = {};
     if (projectId) {
       options.projectId = projectId;
     }
 
-    this.firestore = new Firestore(options);
+    this.datastore = new Datastore(options);
 
-    const collectionName =
-      process.env.DEVICE_REGISTRY_COLLECTION || 'deviceRegistrations';
-    this.collection = this.firestore.collection(collectionName);
+    this.kind = process.env.DEVICE_REGISTRY_COLLECTION || 'deviceRegistrations';
   }
 
-  private mapSnapshot(
-    snapshot: QueryDocumentSnapshot<DocumentData>,
+  private mapEntity(
+    entity: Record<string, any>,
+    key: Key,
   ): DeviceRegistryRecord | null {
-    const data = snapshot.data();
-    if (!data) {
+    if (!entity) {
       return null;
     }
 
-    const {
-      deviceUuid,
-      deviceMac,
-      deviceSecret,
-      createdAt,
-      updatedAt,
-    } = data as DeviceRegistryRecord;
-
     return {
-      deviceUuid,
-      deviceMac,
-      deviceSecret,
-      createdAt,
-      updatedAt,
-    };
+      deviceUuid: key.name || entity.deviceUuid,
+      deviceMac: entity.deviceMac,
+      deviceSecret: entity.deviceSecret,
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+    } as DeviceRegistryRecord;
   }
 
   async findByUuid(deviceUuid: string): Promise<DeviceRegistryRecord | null> {
+    const key = this.datastore.key([this.kind, deviceUuid]);
+
     try {
-      const doc = await this.collection.doc(deviceUuid).get();
-      if (!doc.exists) {
+      const [entity] = await this.datastore.get(key);
+      if (!entity) {
         return null;
       }
-      const data = doc.data() as DeviceRegistryRecord | undefined;
-      return data
-        ? {
-            deviceUuid: data.deviceUuid,
-            deviceMac: data.deviceMac,
-            deviceSecret: data.deviceSecret,
-            createdAt: data.createdAt,
-            updatedAt: data.updatedAt,
-          }
-        : null;
+      return this.mapEntity(entity, key);
     } catch (error) {
       this.logger.error(
         `Failed to load device registry entry for UUID ${deviceUuid}: ${error}`,
@@ -88,16 +66,18 @@ export class DeviceRegistryRepository {
   }
 
   async findByMac(deviceMac: string): Promise<DeviceRegistryRecord | null> {
+    const query = this.datastore
+      .createQuery(this.kind)
+      .filter('deviceMac', '=', deviceMac)
+      .limit(1);
+
     try {
-      const snapshot = await this.collection
-        .where('deviceMac', '==', deviceMac)
-        .limit(1)
-        .get();
-      if (snapshot.empty) {
+      const [entities] = await this.datastore.runQuery(query);
+      if (!entities || entities.length === 0) {
         return null;
       }
-      const doc = snapshot.docs[0];
-      return this.mapSnapshot(doc);
+      const entity = entities[0];
+      return this.mapEntity(entity, entity[Datastore.KEY]);
     } catch (error) {
       this.logger.error(
         `Failed to load device registry entry for MAC ${deviceMac}: ${error}`,
@@ -112,29 +92,34 @@ export class DeviceRegistryRepository {
       'deviceUuid' | 'deviceMac' | 'deviceSecret'
     >,
   ): Promise<DeviceRegistryRecord> {
-    const docRef = this.collection.doc(record.deviceUuid);
+    const key = this.datastore.key([this.kind, record.deviceUuid]);
     const now = new Date().toISOString();
 
-    try {
-      const existing = await docRef.get();
-      const createdAt = existing.exists
-        ? (existing.data()?.createdAt as string | undefined) || now
-        : now;
+    const transaction = this.datastore.transaction();
 
-      const payload: DeviceRegistryRecord = {
+    try {
+      await transaction.run();
+      const [existing] = await transaction.get(key);
+      const createdAt =
+        (existing && (existing.createdAt as string | undefined)) || now;
+
+      const entity = {
         deviceUuid: record.deviceUuid,
         deviceMac: record.deviceMac,
         deviceSecret: record.deviceSecret,
         createdAt,
         updatedAt: now,
-      };
+      } as DeviceRegistryRecord;
 
-      await docRef.set(payload, { merge: false });
-      return payload;
+      transaction.save({ key, data: entity });
+      await transaction.commit();
+
+      return entity;
     } catch (error) {
       this.logger.error(
         `Failed to persist device registry entry for UUID ${record.deviceUuid}: ${error}`,
       );
+      await transaction.rollback().catch(() => undefined);
       throw error;
     }
   }
