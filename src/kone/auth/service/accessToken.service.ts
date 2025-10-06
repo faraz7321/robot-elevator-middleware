@@ -18,12 +18,15 @@ export class AccessTokenService {
     AccessTokenData
   >();
 
-  async getAccessToken(buildingId: string): Promise<string> {
+  async getAccessToken(
+    buildingId: string,
+    groupId: string = '1',
+  ): Promise<string> {
     validateClientIdAndClientSecret(
       this.KONE_CLIENT_ID,
       this.KONE_CLIENT_SECRET,
     );
-    const scopes = this.getScopes(buildingId);
+    const scopes = this.getScopes(buildingId, groupId);
     const existingAccessToken: AccessTokenData | undefined =
       this.scopeToTokenMap.get(scopes.join(' '));
     if (existingAccessToken && Date.now() < existingAccessToken.expiresAt) {
@@ -45,16 +48,14 @@ export class AccessTokenService {
     return accessTokenData.access_token;
   }
 
-  private getScopes(buildingId: string): string[] {
+  private getScopes(buildingId: string, groupId: string = '1'): string[] {
     const scopes = ['application/inventory'];
     const id = buildingId.startsWith(BUILDING_ID_PREFIX)
       ? buildingId.slice(BUILDING_ID_PREFIX.length)
       : buildingId;
-    const groupId = 1;
-    //scopes.push(`topology/building:${id}:1`);
+    //scopes.push(`topology/building:${id}:${groupId}`);
     scopes.push(`robotcall/group:${id}:${groupId}`);
     //scopes.push(`callgiving/group:${id}:${groupId}`);
-    scopes.push('application/inventory');
     //scopes.push('equipmentstatus/*');
     return scopes;
   }

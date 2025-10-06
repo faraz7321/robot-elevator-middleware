@@ -14,16 +14,20 @@ export class DeviceController {
   constructor(private readonly deviceService: DeviceService) {}
 
   @Post('register')
-  registerDevice(
+  async registerDevice(
     @Body() request: RegisterDeviceRequestDTO,
-  ): RegisterDeviceResponseDTO {
+  ): Promise<RegisterDeviceResponseDTO> {
     validateRegisterRequest(request);
     return this.deviceService.registerDevice(request);
   }
 
   @Post('binding')
-  bindDevice(@Body() request: BindDeviceRequestDTO): BindDeviceResponseDTO {
-    const deviceSecret = this.deviceService.getDeviceSecret(request.deviceUuid);
+  async bindDevice(
+    @Body() request: BindDeviceRequestDTO,
+  ): Promise<BindDeviceResponseDTO> {
+    const deviceSecret = await this.deviceService.getDeviceSecret(
+      request.deviceUuid,
+    );
     if (!deviceSecret) {
       throw new UnauthorizedException('Device not registered');
     }
@@ -32,8 +36,12 @@ export class DeviceController {
   }
 
   @Post('unbinding')
-  unbindDevice(@Body() request: BindDeviceRequestDTO): BindDeviceResponseDTO {
-    const deviceSecret = this.deviceService.getDeviceSecret(request.deviceUuid);
+  async unbindDevice(
+    @Body() request: BindDeviceRequestDTO,
+  ): Promise<BindDeviceResponseDTO> {
+    const deviceSecret = await this.deviceService.getDeviceSecret(
+      request.deviceUuid,
+    );
     if (!deviceSecret) {
       throw new UnauthorizedException('Device not registered');
     }

@@ -12,7 +12,7 @@ import { validateSignedRequest } from '../../common/verify-signature';
 import { DeviceService } from '../../device/service/device.service';
 import * as dotenv from 'dotenv';
 import { CallElevatorResponseDTO } from '../dtos/call/CallElevatorResponseDTO';
-import { logIncoming, logOutgoing } from '../../common/logger';
+import { logIncoming, logOutgoing } from '../../../logger/gcp-logger.service';
 dotenv.config();
 
 @Controller('lift')
@@ -27,7 +27,9 @@ export class ElevatorController {
     @Body() request: ListElevatorsRequestDTO,
   ): Promise<ListElevatorsResponseDTO> {
     logIncoming('robot /openapi/v5/lift/list', request);
-    const deviceSecret = this.deviceService.getDeviceSecret(request.deviceUuid);
+    const deviceSecret = await this.deviceService.getDeviceSecret(
+      request.deviceUuid,
+    );
     if (!deviceSecret) {
       throw new UnauthorizedException('Device not registered');
     }
@@ -42,7 +44,9 @@ export class ElevatorController {
     @Body() request: LiftStatusRequestDTO,
   ): Promise<LiftStatusResponseDTO> {
     logIncoming('robot /openapi/v5/lift/status', request);
-    const deviceSecret = this.deviceService.getDeviceSecret(request.deviceUuid);
+    const deviceSecret = await this.deviceService.getDeviceSecret(
+      request.deviceUuid,
+    );
     if (!deviceSecret) {
       throw new UnauthorizedException('Device not registered');
     }
@@ -72,7 +76,9 @@ export class ElevatorController {
     @Body() request: CallElevatorRequestDTO,
   ): Promise<CallElevatorResponseDTO> {
     logIncoming('robot /openapi/v5/lift/call', request);
-    const deviceSecret = this.deviceService.getDeviceSecret(request.deviceUuid);
+    const deviceSecret = await this.deviceService.getDeviceSecret(
+      request.deviceUuid,
+    );
     if (!deviceSecret) {
       throw new UnauthorizedException('Device not registered');
     }
@@ -102,7 +108,9 @@ export class ElevatorController {
     @Body() request: DelayDoorRequestDTO,
   ): Promise<BaseResponseDTO> {
     logIncoming('robot /openapi/v5/lift/open', request);
-    const deviceSecret = this.deviceService.getDeviceSecret(request.deviceUuid);
+    const deviceSecret = await this.deviceService.getDeviceSecret(
+      request.deviceUuid,
+    );
     if (!deviceSecret) {
       throw new UnauthorizedException('Device not registered');
     }
@@ -132,7 +140,9 @@ export class ElevatorController {
     @Body() request: ReserveAndCancelRequestDTO,
   ): Promise<BaseResponseDTO> {
     logIncoming('robot /openapi/v5/lift/lock', request);
-    const deviceSecret = this.deviceService.getDeviceSecret(request.deviceUuid);
+    const deviceSecret = await this.deviceService.getDeviceSecret(
+      request.deviceUuid,
+    );
     if (!deviceSecret) {
       throw new UnauthorizedException('Device not registered');
     }

@@ -3,7 +3,7 @@ import querystring from 'querystring';
 import WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import _ from 'lodash';
-import { logIncoming, logOutgoing } from './logger';
+import { logIncoming, logOutgoing } from '../../logger/gcp-logger.service';
 
 import {
   BuildingTopology,
@@ -527,7 +527,11 @@ export async function waitForResponse(
     const onMessage = function (data: string) {
       try {
         const dataBlob = JSON.parse(data);
-        if (String(dataBlob.requestId) === String(requestId)) {
+        const matchesRequest =
+          String(dataBlob.requestId) === String(requestId) ||
+          String(dataBlob?.payload?.request_id) === String(requestId) ||
+          String(dataBlob?.data?.request_id) === String(requestId);
+        if (matchesRequest) {
           if (
             !resolveAny &&
             dataBlob.type !== 'ok' &&

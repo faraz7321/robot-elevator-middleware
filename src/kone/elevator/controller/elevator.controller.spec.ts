@@ -65,7 +65,7 @@ describe('ElevatorController', () => {
     reserveOrCancelCall: jest.fn(),
   } as Record<string, any>;
   const deviceService = {
-    getDeviceSecret: jest.fn().mockReturnValue(deviceSecret),
+    getDeviceSecret: jest.fn().mockResolvedValue(deviceSecret),
   } as Record<string, any>;
 
   beforeAll(async () => {
@@ -82,7 +82,7 @@ describe('ElevatorController', () => {
   });
 
   beforeEach(() => {
-    deviceService.getDeviceSecret.mockReturnValue(deviceSecret);
+    deviceService.getDeviceSecret.mockResolvedValue(deviceSecret);
   });
 
   afterEach(() => {
