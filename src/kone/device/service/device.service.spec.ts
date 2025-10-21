@@ -12,7 +12,11 @@ describe('DeviceService bindings', () => {
   const accessTokenService = {
     getAccessToken: jest.fn().mockResolvedValue('token'),
   } as any;
-  const repository = {} as any;
+  const registryRepository = {} as any;
+  const bindingRepository = {
+    findByUuid: jest.fn(),
+    save: jest.fn(),
+  } as any;
 
   beforeEach(() => {
     (fetchBuildingTopology as jest.Mock).mockResolvedValue({
@@ -24,7 +28,20 @@ describe('DeviceService bindings', () => {
       ],
     });
     accessTokenService.getAccessToken.mockClear();
-    service = new DeviceService(repository, accessTokenService);
+    bindingRepository.findByUuid.mockClear();
+    bindingRepository.save.mockClear();
+    bindingRepository.findByUuid.mockResolvedValue(null);
+    bindingRepository.save.mockResolvedValue({
+      deviceUuid: '123456789012345678901234',
+      liftNos: [1],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    service = new DeviceService(
+      registryRepository,
+      bindingRepository,
+      accessTokenService,
+    );
   });
 
   it('returns success errcode and errmsg when binding', async () => {
@@ -39,9 +56,14 @@ describe('DeviceService bindings', () => {
     expect(response.result).toEqual(
       expect.objectContaining({ liftNo: 1, bindingStatus: '11' }),
     );
+    expect(bindingRepository.save).toHaveBeenCalledWith({
+      deviceUuid: '123456789012345678901234',
+      liftNos: [1],
+    });
   });
 
   it('returns success errcode and errmsg when unbinding without prior binding', async () => {
+    bindingRepository.save.mockClear();
     const response = await service.unbindDevice({
       deviceUuid: '123456789012345678901234',
       liftNos: [1],
@@ -53,6 +75,35 @@ describe('DeviceService bindings', () => {
     expect(response.result).toEqual(
       expect.objectContaining({ liftNo: 1, bindingStatus: '00' }),
     );
+    expect(bindingRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('persists binding removal when unbinding existing lift', async () => {
+    bindingRepository.findByUuid.mockResolvedValueOnce({
+      deviceUuid: '123456789012345678901234',
+      liftNos: [1],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    bindingRepository.save.mockClear();
+    bindingRepository.save.mockResolvedValueOnce({
+      deviceUuid: '123456789012345678901234',
+      liftNos: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const response = await service.unbindDevice({
+      deviceUuid: '123456789012345678901234',
+      liftNos: [1],
+      placeId: 'place-1',
+    } as any);
+
+    expect(response.errcode).toBe(0);
+    expect(bindingRepository.save).toHaveBeenCalledWith({
+      deviceUuid: '123456789012345678901234',
+      liftNos: [],
+    });
   });
 
   it('marks errcode and errmsg as failure when any bind result is not successful', () => {
@@ -75,6 +126,7 @@ describe('DeviceService bindings', () => {
   });
 
   it('returns unauthorized status when binding lift outside entitlement', async () => {
+    bindingRepository.save.mockClear();
     const response = await service.bindDevice({
       deviceUuid: '123456789012345678901234',
       liftNos: [999],
@@ -86,9 +138,11 @@ describe('DeviceService bindings', () => {
     expect(response.result).toEqual(
       expect.objectContaining({ liftNo: 999, bindingStatus: '-1' }),
     );
+    expect(bindingRepository.save).not.toHaveBeenCalled();
   });
 
   it('returns unauthorized status when unbinding lift outside entitlement', async () => {
+    bindingRepository.save.mockClear();
     const response = await service.unbindDevice({
       deviceUuid: '123456789012345678901234',
       liftNos: [999],
@@ -100,6 +154,7 @@ describe('DeviceService bindings', () => {
     expect(response.result).toEqual(
       expect.objectContaining({ liftNo: 999, bindingStatus: '-1' }),
     );
+    expect(bindingRepository.save).not.toHaveBeenCalled();
   });
 
   it('keeps errcode success when all unbind results are successful', () => {

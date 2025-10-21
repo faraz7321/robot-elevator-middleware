@@ -54,7 +54,7 @@ export class ElevatorController {
     // Ignore status request if device is not bound to the lift
     const isBoundStatus =
       typeof (this.deviceService as any).isDeviceBoundToLift === 'function'
-        ? (this.deviceService as any).isDeviceBoundToLift(
+        ? await (this.deviceService as any).isDeviceBoundToLift(
             request.deviceUuid,
             request.liftNo,
           )
@@ -86,7 +86,7 @@ export class ElevatorController {
     // Ensure the device is bound to the requested lift before making the call
     const isBound =
       typeof (this.deviceService as any).isDeviceBoundToLift === 'function'
-        ? (this.deviceService as any).isDeviceBoundToLift(
+        ? await (this.deviceService as any).isDeviceBoundToLift(
             request.deviceUuid,
             request.liftNo,
           )
@@ -118,7 +118,7 @@ export class ElevatorController {
     // Ignore open request if device is not bound to the lift
     const isBoundOpen =
       typeof (this.deviceService as any).isDeviceBoundToLift === 'function'
-        ? (this.deviceService as any).isDeviceBoundToLift(
+        ? await (this.deviceService as any).isDeviceBoundToLift(
             request.deviceUuid,
             request.liftNo,
           )
@@ -150,7 +150,7 @@ export class ElevatorController {
     // Ignore lock/unlock request if device is not bound to the lift
     const isBoundLock =
       typeof (this.deviceService as any).isDeviceBoundToLift === 'function'
-        ? (this.deviceService as any).isDeviceBoundToLift(
+        ? await (this.deviceService as any).isDeviceBoundToLift(
             request.deviceUuid,
             request.liftNo,
           )

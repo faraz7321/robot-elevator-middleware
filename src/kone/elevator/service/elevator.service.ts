@@ -1697,8 +1697,14 @@ export class ElevatorService {
     request: ReserveAndCancelRequestDTO,
   ): Promise<BaseResponseDTO> {
     const response = new BaseResponseDTO();
+    const skipResCall = process.env.SKIP_RES_CALL || 'true';
+    if(skipResCall == 'true'){
+        response.errcode = 0;
+        response.errmsg = 'SUCCESS';
+        return response;
+    }
     try {
-      const requestId = uuidv4();
+      const requestId = this.getRequestId();
       const { buildingId, groupId } = this.parsePlaceId(request.placeId);
       const accessToken = await this.accessTokenService.getAccessToken(
         buildingId,
@@ -1751,7 +1757,7 @@ export class ElevatorService {
 
       const wsResponse = await waitForResponse(
         webSocketConnection,
-        requestId,
+        String(requestId),
         10,
         true        
       );
@@ -1765,9 +1771,6 @@ export class ElevatorService {
       response.errcode = 1;
       response.errmsg = 'FAILED';
     }
-    // test: always true
-    response.errcode = 0;
-    response.errmsg = "SUCCESS";
     return response;
   }
 }

@@ -7,6 +7,7 @@ import { RegisterDeviceResultDTO } from '../dto/register/RegisterDeviceResultDTO
 import { randomBytes, createHash } from 'crypto';
 import { BindDeviceResultDTO } from '../dto/bind/BindDeviceResultDTO';
 import { DeviceRegistryRepository } from '../repository/device-registry.repository';
+import { DeviceBindingRepository } from '../repository/device-binding.repository';
 import { appLogger } from '../../../logger/gcp-logger.service';
 import { AccessTokenService } from '../../auth/service/accessToken.service';
 import { fetchBuildingTopology } from '../../common/koneapi';
@@ -29,10 +30,12 @@ export class DeviceService {
     { deviceSecret: string; deviceMac: string }
   >();
   private deviceBindings = new Map<string, Set<number>>();
+  private bindingLoadPromises = new Map<string, Promise<Set<number>>>();
   private liftCache = new Map<string, { lifts: number[]; expiresAt: number }>();
 
   constructor(
     private readonly deviceRegistryRepository: DeviceRegistryRepository,
+    private readonly deviceBindingRepository: DeviceBindingRepository,
     private readonly accessTokenService: AccessTokenService,
   ) {}
 
@@ -258,20 +261,55 @@ export class DeviceService {
     return existing.deviceSecret;
   }
 
+  private async loadBindings(deviceUuid: string): Promise<Set<number>> {
+    try {
+      const record = await this.deviceBindingRepository.findByUuid(deviceUuid);
+      const bindings = new Set<number>(record?.liftNos ?? []);
+      this.deviceBindings.set(deviceUuid, bindings);
+      return bindings;
+    } finally {
+      this.bindingLoadPromises.delete(deviceUuid);
+    }
+  }
+
+  private getOrCreateBindings(deviceUuid: string): Promise<Set<number>> {
+    const cached = this.deviceBindings.get(deviceUuid);
+    if (cached) {
+      return Promise.resolve(cached);
+    }
+
+    let loadPromise = this.bindingLoadPromises.get(deviceUuid);
+    if (!loadPromise) {
+      loadPromise = this.loadBindings(deviceUuid);
+      this.bindingLoadPromises.set(deviceUuid, loadPromise);
+    }
+    return loadPromise;
+  }
+
+  private async persistBindings(
+    deviceUuid: string,
+    bindings: Set<number>,
+  ): Promise<void> {
+    await this.deviceBindingRepository.save({
+      deviceUuid,
+      liftNos: Array.from(new Set(bindings)).sort((a, b) => a - b),
+    });
+  }
+
   /**
    * Check if a device is bound to a specific lift number
    */
-  isDeviceBoundToLift(deviceUuid: string, liftNo: number): boolean {
-    const bindings = this.deviceBindings.get(deviceUuid);
-    return bindings ? bindings.has(liftNo) : false;
+  async isDeviceBoundToLift(deviceUuid: string, liftNo: number): Promise<boolean> {
+    const bindings = await this.getOrCreateBindings(deviceUuid);
+    return bindings.has(liftNo);
   }
 
   /**
    * Get all lift numbers that the device is currently bound to
    */
-  getBoundLiftsForDevice(deviceUuid: string): number[] {
-    const bindings = this.deviceBindings.get(deviceUuid);
-    return bindings ? Array.from(bindings) : [];
+  async getBoundLiftsForDevice(deviceUuid: string): Promise<number[]> {
+    const bindings = await this.getOrCreateBindings(deviceUuid);
+    return Array.from(bindings).sort((a, b) => a - b);
   }
 
   async bindDevice(
@@ -291,11 +329,9 @@ export class DeviceService {
     const availableLifts = await this.getAuthorizedLiftNumbers(request.placeId);
     const liftsToBind = liftNos.length > 0 ? liftNos : Array.from(availableLifts);
 
-    if (!this.deviceBindings.has(deviceUuid)) {
-      this.deviceBindings.set(deviceUuid, new Set<number>());
-    }
+    const bound = await this.getOrCreateBindings(deviceUuid);
 
-    const bound = this.deviceBindings.get(deviceUuid)!;
+    let hasChanges = false;
 
     const results: BindDeviceResultDTO[] = liftsToBind.map((liftNo) => {
       if (!availableLifts.has(liftNo)) {
@@ -305,12 +341,19 @@ export class DeviceService {
         };
       }
 
-      bound.add(liftNo);
+      if (!bound.has(liftNo)) {
+        bound.add(liftNo);
+        hasChanges = true;
+      }
       return {
         liftNo,
         bindingStatus: BIND_SUCCESS_STATUS,
       };
     });
+
+    if (hasChanges) {
+      await this.persistBindings(deviceUuid, bound);
+    }
     this.populateResponseStatus(
       response,
       results,
@@ -340,30 +383,9 @@ export class DeviceService {
     const liftsToUnbind =
       liftNos.length > 0 ? liftNos : Array.from(availableLifts);
 
-    if (!this.deviceBindings.has(deviceUuid)) {
-      const results: BindDeviceResultDTO[] = liftsToUnbind.map((liftNo) => {
-        if (!availableLifts.has(liftNo)) {
-          return {
-            liftNo,
-            bindingStatus: UNAUTHORIZED_STATUS,
-          };
-        }
+    const bound = await this.getOrCreateBindings(deviceUuid);
 
-        return {
-          liftNo,
-          bindingStatus: UNBIND_SUCCESS_STATUS,
-        };
-      });
-      this.populateResponseStatus(
-        response,
-        results,
-        new Set([UNBIND_SUCCESS_STATUS]),
-        NOT_AUTHORIZED_MESSAGE,
-      );
-      return response;
-    }
-
-    const bound = this.deviceBindings.get(deviceUuid)!;
+    let hasChanges = false;
 
     const results: BindDeviceResultDTO[] = liftsToUnbind.map((liftNo) => {
       if (!availableLifts.has(liftNo)) {
@@ -373,13 +395,17 @@ export class DeviceService {
         };
       }
 
-      bound.delete(liftNo);
+      const removed = bound.delete(liftNo);
+      hasChanges = hasChanges || removed;
       return {
         liftNo,
         bindingStatus: UNBIND_SUCCESS_STATUS,
       };
     });
 
+    if (hasChanges) {
+      await this.persistBindings(deviceUuid, bound);
+    }
     this.populateResponseStatus(
       response,
       results,
