@@ -944,7 +944,13 @@ export class ElevatorService {
       typeof lockCtx?.fromFloor === 'number' && !isNaN(lockCtx.fromFloor)
         ? lockCtx.fromFloor
         : undefined;
-    if (typeof fromFloor === 'undefined') {
+    const toFloor =
+      typeof lockCtx?.toFloor === 'number' && !isNaN(lockCtx.toFloor)
+        ? lockCtx.toFloor
+        : typeof request.toFloor === 'number' && !isNaN(request.toFloor)
+          ? request.toFloor
+          : undefined;
+    if (typeof fromFloor === 'undefined' || typeof toFloor === 'undefined') {
       const missingCtx = new CallElevatorResponseDTO();
       missingCtx.errcode = 1;
       missingCtx.errmsg = 'MISSING_LOCK_CONTEXT';
@@ -955,7 +961,7 @@ export class ElevatorService {
     const idempTtlMs = Number(
       process.env.KONE_CALL_IDEMPOTENCY_TTL_MS || 10_000,
     );
-    const journeyKey = `${request.deviceUuid}|${targetBuildingId}|${groupId}|${fromFloor}|${request.toFloor}`;
+    const journeyKey = `${request.deviceUuid}|${targetBuildingId}|${groupId}|${fromFloor}|${toFloor}`;
     const cached = this.callIdempotencyCache.get(journeyKey);
     if (cached && Date.now() < cached.expiresAt) {
       return plainToInstance(CallElevatorResponseDTO, cached.response);
@@ -1112,7 +1118,7 @@ export class ElevatorService {
       };
 
       const fromFloorEntries = floorMappingEntry.byFloor.get(fromFloor);
-      const toFloorEntries = floorMappingEntry.byFloor.get(request.toFloor);
+      const toFloorEntries = floorMappingEntry.byFloor.get(toFloor);
       const fromFloorTerminals = collectTerminals(fromFloorEntries);
       const toFloorTerminals = collectTerminals(toFloorEntries);
 
@@ -1164,7 +1170,7 @@ export class ElevatorService {
         targetBuildingId,
         targetGroupId,
         topology,
-        request.toFloor,
+        toFloor,
         selectedTerminalId,
       );
 
@@ -1199,7 +1205,7 @@ export class ElevatorService {
         buildingId: targetBuildingId,
         groupId: targetGroupId,
         fromFloor,
-        toFloor: request.toFloor,
+        toFloor,
         fromArea: usedFromArea,
         toArea: usedToArea,
         terminal: selectedTerminalId,
@@ -1411,7 +1417,7 @@ export class ElevatorService {
           response.errcode = 0;
           response.errmsg = 'SUCCESS';
           response.sessionId = callEvent.data?.session_id;
-          response.destination = request.toFloor;
+          response.destination = toFloor;
           // Save context for future hold_open calls from the same client
           const liftDeck = Array.isArray(allowedLiftAreaIds)
             ? Number(allowedLiftAreaIds[0])

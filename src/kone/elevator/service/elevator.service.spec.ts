@@ -134,6 +134,28 @@ describe('ElevatorService callElevator', () => {
     expect(actionPayload?.payload?.call?.destination).toBe(5000);
   });
 
+  it('uses cached lock destination when call payload differs', async () => {
+    const req = new CallElevatorRequestDTO();
+    req.placeId = 'b1';
+    req.liftNo = 1;
+    req.deviceUuid = defaultDeviceUuid;
+    req.toFloor = 1; // robot sends current floor, but lock stored destination
+
+    primeLock(req.placeId, req.liftNo, 1, 6, req.deviceUuid);
+
+    const res = await service.callElevator(req);
+
+    expect(res.errcode).toBe(0);
+    expect(res.destination).toBe(6);
+
+    const wsMock = openWebSocketConnection as jest.Mock;
+    const ws = wsMock.mock.results[wsMock.mock.results.length - 1].value;
+    const actionPayload = ws.send.mock.calls
+      .map((call: any) => JSON.parse(call[0]))
+      .find((p: any) => p?.callType === 'action');
+    expect(actionPayload?.payload?.call?.destination).toBe(6000);
+  });
+
   it('uses floor-specific terminal mapping when available', async () => {
     (fetchBuildingTopology as jest.Mock).mockResolvedValueOnce({
       groups: [
