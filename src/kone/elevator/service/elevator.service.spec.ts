@@ -21,6 +21,19 @@ describe('ElevatorService callElevator', () => {
     getAccessToken: jest.fn().mockResolvedValue('token'),
   } as unknown as AccessTokenService;
   let getLiftStatusMock: jest.Mock;
+  const defaultDeviceUuid = '123456789012345678901234';
+  const primeLock = (
+    placeId: string,
+    liftNo: number,
+    fromFloor: number,
+    toFloor: number,
+    deviceUuid = defaultDeviceUuid,
+  ) => {
+    (service as any).lockFloorCache.set(
+      `${deviceUuid}|${placeId}|${liftNo}`,
+      { fromFloor, toFloor, updatedAt: Date.now() },
+    );
+  };
 
   beforeEach(() => {
     service = new ElevatorService(accessTokenService);
@@ -101,8 +114,10 @@ describe('ElevatorService callElevator', () => {
     const req = new CallElevatorRequestDTO();
     req.placeId = 'b1';
     req.liftNo = 1;
-    req.fromFloor = 1;
+    req.deviceUuid = defaultDeviceUuid;
     req.toFloor = 5;
+
+    primeLock(req.placeId, req.liftNo, 1, 5, req.deviceUuid);
 
     const res = await service.callElevator(req);
 
@@ -163,8 +178,10 @@ describe('ElevatorService callElevator', () => {
     const req = new CallElevatorRequestDTO();
     req.placeId = 'b1';
     req.liftNo = 1;
-    req.fromFloor = 1;
+    req.deviceUuid = defaultDeviceUuid;
     req.toFloor = 6;
+
+    primeLock(req.placeId, req.liftNo, 1, 6, req.deviceUuid);
 
     const res = await service.callElevator(req);
     expect(res.errcode).toBe(0);
@@ -186,8 +203,10 @@ describe('ElevatorService callElevator', () => {
     const req = new CallElevatorRequestDTO();
     req.placeId = 'b1';
     req.liftNo = 1;
-    req.fromFloor = 1;
+    req.deviceUuid = defaultDeviceUuid;
     req.toFloor = 5;
+
+    primeLock(req.placeId, req.liftNo, 1, 5, req.deviceUuid);
 
     const res = await service.callElevator(req);
 
@@ -209,8 +228,10 @@ describe('ElevatorService callElevator', () => {
     const req = new CallElevatorRequestDTO();
     req.placeId = 'b1:2'; // group suffix 2
     req.liftNo = 1;
-    req.fromFloor = 3;
+    req.deviceUuid = defaultDeviceUuid;
     req.toFloor = 6;
+
+    primeLock(req.placeId, req.liftNo, 3, 6, req.deviceUuid);
 
     const res = await service.callElevator(req);
 
@@ -245,13 +266,14 @@ describe('ElevatorService callElevator', () => {
       const req = new CallElevatorRequestDTO();
       req.placeId = 'b1:1';
       req.liftNo = 1;
-      req.fromFloor = 4;
       req.toFloor = 8;
       req.deviceUuid = 'aaaaaaaaaaaaaaaaaaaaaaaa';
       req.appname = 'app';
       req.sign = 's';
       req.check = 'c';
       req.ts = Date.now();
+
+      primeLock(req.placeId, req.liftNo, 4, 8, req.deviceUuid);
 
       const first = await service.callElevator(req);
       expect(first.errcode).toBe(0);
@@ -292,7 +314,6 @@ describe('ElevatorService callElevator', () => {
       const base = new CallElevatorRequestDTO();
       base.placeId = 'b1:1';
       base.liftNo = 1;
-      base.fromFloor = 1;
       base.deviceUuid = 'bbbbbbbbbbbbbbbbbbbbbbbb';
       base.appname = 'app';
       base.sign = 's';
@@ -306,9 +327,11 @@ describe('ElevatorService callElevator', () => {
         toFloor: 3,
       });
 
+      primeLock(req1.placeId, req1.liftNo, 1, req1.toFloor, req1.deviceUuid);
       const res1 = await service.callElevator(req1);
       expect(res1.errcode).toBe(0);
 
+      primeLock(req2.placeId, req2.liftNo, 1, req2.toFloor, req2.deviceUuid);
       const res2 = await service.callElevator(req2);
       expect(res2.errcode).toBe(1);
       expect(res2.errmsg).toBe('RATE_LIMITED');

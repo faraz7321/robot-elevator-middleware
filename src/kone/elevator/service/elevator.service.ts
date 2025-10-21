@@ -126,6 +126,11 @@ export class ElevatorService {
     }
   > = new Map();
 
+  private lockFloorCache: Map<
+    string,
+    { fromFloor: number; toFloor: number; updatedAt: number }
+  > = new Map();
+
   private getDoorCtxKey(
     deviceUuid: string,
     buildingId: string,
@@ -173,6 +178,10 @@ export class ElevatorService {
       this.terminalsCache.set(key, map);
     }
     return map;
+  }
+
+  private getLockCtxKey(deviceUuid: string, placeId: string, liftNo: number) {
+    return `${deviceUuid}|${placeId}|${liftNo}`;
   }
 
   private pickTerminalId(
@@ -928,11 +937,25 @@ export class ElevatorService {
       request.placeId,
     );
 
+    const lockCtx = this.lockFloorCache.get(
+      this.getLockCtxKey(request.deviceUuid, request.placeId, request.liftNo),
+    );
+    const fromFloor =
+      typeof lockCtx?.fromFloor === 'number' && !isNaN(lockCtx.fromFloor)
+        ? lockCtx.fromFloor
+        : undefined;
+    if (typeof fromFloor === 'undefined') {
+      const missingCtx = new CallElevatorResponseDTO();
+      missingCtx.errcode = 1;
+      missingCtx.errmsg = 'MISSING_LOCK_CONTEXT';
+      return missingCtx;
+    }
+
     // Idempotency check: if same device + journey within TTL, return cached response
     const idempTtlMs = Number(
       process.env.KONE_CALL_IDEMPOTENCY_TTL_MS || 10_000,
     );
-    const journeyKey = `${request.deviceUuid}|${targetBuildingId}|${groupId}|${request.fromFloor}|${request.toFloor}`;
+    const journeyKey = `${request.deviceUuid}|${targetBuildingId}|${groupId}|${fromFloor}|${request.toFloor}`;
     const cached = this.callIdempotencyCache.get(journeyKey);
     if (cached && Date.now() < cached.expiresAt) {
       return plainToInstance(CallElevatorResponseDTO, cached.response);
@@ -1088,9 +1111,7 @@ export class ElevatorService {
         return result;
       };
 
-      const fromFloorEntries = floorMappingEntry.byFloor.get(
-        request.fromFloor,
-      );
+      const fromFloorEntries = floorMappingEntry.byFloor.get(fromFloor);
       const toFloorEntries = floorMappingEntry.byFloor.get(request.toFloor);
       const fromFloorTerminals = collectTerminals(fromFloorEntries);
       const toFloorTerminals = collectTerminals(toFloorEntries);
@@ -1136,7 +1157,7 @@ export class ElevatorService {
         targetBuildingId,
         targetGroupId,
         topology,
-        request.fromFloor,
+        fromFloor,
         selectedTerminalId,
       );
       const toArea = this.resolveAreaIdForFloor(
@@ -1177,7 +1198,7 @@ export class ElevatorService {
       logOutgoing('kone floor->area mapping', {
         buildingId: targetBuildingId,
         groupId: targetGroupId,
-        fromFloor: request.fromFloor,
+        fromFloor,
         toFloor: request.toFloor,
         fromArea: usedFromArea,
         toArea: usedToArea,
@@ -1697,6 +1718,20 @@ export class ElevatorService {
     request: ReserveAndCancelRequestDTO,
   ): Promise<BaseResponseDTO> {
     const response = new BaseResponseDTO();
+    const lockCtxKey = this.getLockCtxKey(
+      request.deviceUuid,
+      request.placeId,
+      request.liftNo,
+    );
+    const fromFloor = Number(request.fromFloor);
+    const toFloor = Number(request.toFloor);
+    if (!isNaN(fromFloor) && !isNaN(toFloor)) {
+      this.lockFloorCache.set(lockCtxKey, {
+        fromFloor,
+        toFloor,
+        updatedAt: Date.now(),
+      });
+    }
     const skipResCall = process.env.SKIP_RES_CALL || 'true';
     if(skipResCall == 'true'){
         response.errcode = 0;
