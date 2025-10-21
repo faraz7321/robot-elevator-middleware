@@ -40,7 +40,7 @@ describe('ElevatorService callElevator', () => {
     jest.spyOn(service as any, 'getRequestId').mockReturnValue(123);
     getLiftStatusMock = jest
       .fn()
-      .mockResolvedValue({ result: [{ mode: 'NOR' }] });
+      .mockResolvedValue({ result: { mode: 'NOR' } });
     Object.assign(service, { getLiftStatus: getLiftStatusMock });
     (fetchBuildingTopology as jest.Mock).mockResolvedValue({
       groups: [{ groupId: 'gid:1', lifts: [] }],
@@ -220,7 +220,7 @@ describe('ElevatorService callElevator', () => {
   it('does not depend on operational mode check in call flow', async () => {
     // Even if a separate status endpoint might report non-operational,
     // callElevator only pings and proceeds with the call on its own WS.
-    getLiftStatusMock.mockResolvedValue({ result: [{ mode: 'FRD' }] });
+    getLiftStatusMock.mockResolvedValue({ result: { mode: 'FRD' } });
 
     const req = new CallElevatorRequestDTO();
     req.placeId = 'b1';
@@ -451,7 +451,7 @@ describe('ElevatorService getLiftStatus', () => {
 
     const res = await service.getLiftStatus(req);
 
-    expect(res.result[0]).toEqual({
+    expect(res.result).toEqual({
       liftNo: 1,
       floor: 5,
       state: 1,

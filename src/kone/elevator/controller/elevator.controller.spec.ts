@@ -118,7 +118,7 @@ describe('ElevatorController', () => {
     const sign = generateSign(body, appname, appSecret, ts);
     const check = generateCheck(deviceUuid, ts, deviceSecret);
     const req = { ...body, sign, check };
-    const res = { result: ['status'] };
+    const res = { result: { liftNo, floor: 1 } };
     elevatorService.getLiftStatus.mockResolvedValue(res);
 
     const response = await request(app.getHttpServer())

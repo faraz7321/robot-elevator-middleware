@@ -1,19 +1,12 @@
 import { BaseResponseDTO } from '../../../baseDtos/BaseResponseDTO';
-import {
-  IsArray,
-  IsNumber,
-  IsOptional,
-  IsString,
-  ValidateNested,
-} from 'class-validator';
+import { IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ListElevatorsResultDTO } from './StatusElevatorsResultDTO';
 
 export class LiftStatusResponseDTO extends BaseResponseDTO {
-  @ValidateNested({ each: true })
-  @IsArray()
+  @ValidateNested()
   @Type(() => ListElevatorsResultDTO)
-  result: ListElevatorsResultDTO[];
+  result: ListElevatorsResultDTO;
 
   @IsNumber()
   liftNo: number;

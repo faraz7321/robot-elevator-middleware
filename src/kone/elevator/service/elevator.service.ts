@@ -898,30 +898,26 @@ export class ElevatorService {
       const direction = directionMap[cache.position?.dir || ''] ?? 0;
       const moving = movingMap[cache.position?.moving_state || ''] ?? 0;
 
-      response.result = [
-        {
-          liftNo: request.liftNo,
-          floor,
-          state: moving,
-          prevDirection: direction,
-          liftDoorStatus: doorState,
-          mode: modeStr || cache.position?.drive_mode || 'UNKNOWN',
-        },
-      ];
+      response.result = {
+        liftNo: request.liftNo,
+        floor,
+        state: moving,
+        prevDirection: direction,
+        liftDoorStatus: doorState,
+        mode: modeStr || cache.position?.drive_mode || 'UNKNOWN',
+      };
       response.errcode = 0;
       response.errmsg = 'SUCCESS';
     } catch (err) {
       console.error('Failed to fetch lift status', err);
-      response.result = [
-        {
-          liftNo: request.liftNo,
-          floor: 0,
-          state: 0,
-          prevDirection: 0,
-          liftDoorStatus: 0,
-          mode: 'UNKNOWN',
-        },
-      ];
+      response.result = {
+        liftNo: request.liftNo,
+        floor: 0,
+        state: 0,
+        prevDirection: 0,
+        liftDoorStatus: 0,
+        mode: 'UNKNOWN',
+      };
       response.errcode = 1;
       response.errmsg = 'FAILED';
     }
