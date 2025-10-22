@@ -1,6 +1,6 @@
-import { IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsNumber, IsOptional, IsString } from 'class-validator';
 
-export class ListElevatorsResultDTO {
+export class LiftStatusResultDTO {
   @IsNumber()
   liftNo: number;
 
@@ -9,6 +9,9 @@ export class ListElevatorsResultDTO {
 
   @IsNumber()
   state: number;
+
+  @IsBoolean()
+  locked: boolean;
 
   @IsNumber()
   prevDirection: number;

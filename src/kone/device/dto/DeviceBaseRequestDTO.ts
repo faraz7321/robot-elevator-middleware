@@ -7,14 +7,18 @@ export class DeviceBaseRequestDTO {
   deviceUuid: string;
 
   @IsString()
+  @IsNotEmpty()
   appname: string;
 
   @IsString()
+  @IsNotEmpty()
   sign: string;
 
   @IsString()
+  @IsNotEmpty()
   check: string;
 
   @IsNumber()
+  @IsNotEmpty()
   ts: number;
 }

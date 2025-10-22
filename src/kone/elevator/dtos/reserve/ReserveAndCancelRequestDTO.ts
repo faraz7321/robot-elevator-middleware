@@ -1,5 +1,5 @@
 import { ElevatorBaseRequest } from '../ElevatorBaseRequest';
-import { IsNotEmpty, IsNumber } from 'class-validator';
+import { IsIn, IsNotEmpty, IsNumber } from 'class-validator';
 
 export class ReserveAndCancelRequestDTO extends ElevatorBaseRequest {
   get liftNo(): number {
@@ -12,6 +12,7 @@ export class ReserveAndCancelRequestDTO extends ElevatorBaseRequest {
 
   @IsNumber()
   @IsNotEmpty()
+  @IsIn([0, 1])
   locked: number;
 
   @IsNumber()

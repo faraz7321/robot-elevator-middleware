@@ -1,5 +1,5 @@
 import { ElevatorBaseRequest } from '../ElevatorBaseRequest';
-import { IsNotEmpty, IsNumber } from 'class-validator';
+import { IsNotEmpty, IsNumber, Max, Min } from 'class-validator';
 
 export class DelayDoorRequestDTO extends ElevatorBaseRequest {
   get liftNo(): number {
@@ -11,6 +11,8 @@ export class DelayDoorRequestDTO extends ElevatorBaseRequest {
   }
   @IsNumber()
   @IsNotEmpty()
+  @Min(0)
+  @Max(9)
   seconds: number;
 
   @IsNumber()

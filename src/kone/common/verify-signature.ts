@@ -12,7 +12,8 @@ function md5(str: string): string {
 
 const ELEVATOR_APP_NAME = process.env.ELEVATOR_APP_NAME || '';
 const ELEVATOR_APP_SECRET = process.env.ELEVATOR_APP_SECRET || '';
-const DISABLE_SIGNATURE_VALIDATION = true;
+const DISABLE_SIGNATURE_VALIDATION =
+  (process.env.DISABLE_SIGNATURE_VALIDATION || '').toLowerCase() === 'true';
 
 export function generateCheck(
   deviceUuid: string,

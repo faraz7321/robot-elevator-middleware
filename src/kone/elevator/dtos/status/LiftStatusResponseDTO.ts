@@ -1,29 +1,10 @@
 import { BaseResponseDTO } from '../../../baseDtos/BaseResponseDTO';
-import { IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ListElevatorsResultDTO } from './StatusElevatorsResultDTO';
+import { LiftStatusResultDTO } from './LiftStatusResultDTO';
 
 export class LiftStatusResponseDTO extends BaseResponseDTO {
   @ValidateNested()
-  @Type(() => ListElevatorsResultDTO)
-  result: ListElevatorsResultDTO;
-
-  @IsNumber()
-  liftNo: number;
-
-  @IsNumber()
-  floor: number;
-
-  @IsNumber()
-  state: number;
-
-  @IsNumber()
-  prevDirection: number;
-
-  @IsNumber()
-  liftDoorStatus: number;
-
-  @IsOptional()
-  @IsString()
-  mode?: string;
+  @Type(() => LiftStatusResultDTO)
+  result: LiftStatusResultDTO;
 }

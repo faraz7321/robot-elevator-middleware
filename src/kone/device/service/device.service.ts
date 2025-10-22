@@ -51,6 +51,28 @@ export class DeviceService {
     this.deviceRegistry.set(deviceUuid, { deviceMac, deviceSecret });
   }
 
+  private async getDeviceIdentity(
+    deviceUuid: string,
+  ): Promise<{ deviceUuid: string; deviceMac?: string } | null> {
+    const cached = this.deviceRegistry.get(deviceUuid);
+    if (cached) {
+      return { deviceUuid, deviceMac: cached.deviceMac };
+    }
+
+    const existing =
+      await this.deviceRegistryRepository.findByUuid(deviceUuid);
+    if (!existing) {
+      return null;
+    }
+
+    this.cacheDevice(
+      existing.deviceUuid,
+      existing.deviceMac,
+      existing.deviceSecret,
+    );
+    return { deviceUuid: existing.deviceUuid, deviceMac: existing.deviceMac };
+  }
+
   private formatBuildingId(id: string): string {
     return id.startsWith('building:') ? id : `building:${id}`;
   }
@@ -328,7 +350,9 @@ export class DeviceService {
     const response = new BindDeviceResponseDTO();
     const availableLifts = await this.getAuthorizedLiftNumbers(request.placeId);
     const liftsToBind = liftNos.length > 0 ? liftNos : Array.from(availableLifts);
-
+    const identity = await this.getDeviceIdentity(deviceUuid);
+    const resultDeviceUuid = identity?.deviceUuid ?? deviceUuid;
+    const resultDeviceMac = identity?.deviceMac;
     const bound = await this.getOrCreateBindings(deviceUuid);
 
     let hasChanges = false;
@@ -337,6 +361,8 @@ export class DeviceService {
       if (!availableLifts.has(liftNo)) {
         return {
           liftNo,
+          deviceUuid: resultDeviceUuid,
+          deviceMac: resultDeviceMac,
           bindingStatus: UNAUTHORIZED_STATUS,
         };
       }
@@ -347,6 +373,8 @@ export class DeviceService {
       }
       return {
         liftNo,
+        deviceUuid: resultDeviceUuid,
+        deviceMac: resultDeviceMac,
         bindingStatus: BIND_SUCCESS_STATUS,
       };
     });
@@ -383,6 +411,9 @@ export class DeviceService {
     const liftsToUnbind =
       liftNos.length > 0 ? liftNos : Array.from(availableLifts);
 
+    const identity = await this.getDeviceIdentity(deviceUuid);
+    const resultDeviceUuid = identity?.deviceUuid ?? deviceUuid;
+    const resultDeviceMac = identity?.deviceMac;
     const bound = await this.getOrCreateBindings(deviceUuid);
 
     let hasChanges = false;
@@ -391,6 +422,8 @@ export class DeviceService {
       if (!availableLifts.has(liftNo)) {
         return {
           liftNo,
+          deviceUuid: resultDeviceUuid,
+          deviceMac: resultDeviceMac,
           bindingStatus: UNAUTHORIZED_STATUS,
         };
       }
@@ -399,6 +432,8 @@ export class DeviceService {
       hasChanges = hasChanges || removed;
       return {
         liftNo,
+        deviceUuid: resultDeviceUuid,
+        deviceMac: resultDeviceMac,
         bindingStatus: UNBIND_SUCCESS_STATUS,
       };
     });
@@ -431,9 +466,6 @@ export class DeviceService {
 
     response.errcode = hasFailure ? 1 : 0;
     response.errmsg = hasFailure ? failureMessage : 'SUCCESS';
-    response.result =
-      normalizedResults.length === 1
-        ? normalizedResults[0]
-        : normalizedResults;
+    response.result = normalizedResults;
   }
 }

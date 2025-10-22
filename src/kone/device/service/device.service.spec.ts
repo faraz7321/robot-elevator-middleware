@@ -53,7 +53,7 @@ describe('DeviceService bindings', () => {
 
     expect(response.errcode).toBe(0);
     expect(response.errmsg).toBe('SUCCESS');
-    expect(response.result).toEqual(
+    expect(response.result).toContainEqual(
       expect.objectContaining({ liftNo: 1, bindingStatus: '11' }),
     );
     expect(bindingRepository.save).toHaveBeenCalledWith({
@@ -72,7 +72,7 @@ describe('DeviceService bindings', () => {
 
     expect(response.errcode).toBe(0);
     expect(response.errmsg).toBe('SUCCESS');
-    expect(response.result).toEqual(
+    expect(response.result).toContainEqual(
       expect.objectContaining({ liftNo: 1, bindingStatus: '00' }),
     );
     expect(bindingRepository.save).not.toHaveBeenCalled();
@@ -135,7 +135,7 @@ describe('DeviceService bindings', () => {
 
     expect(response.errcode).toBe(1);
     expect(response.errmsg).toBe('NOT_AUTHORIZED');
-    expect(response.result).toEqual(
+    expect(response.result).toContainEqual(
       expect.objectContaining({ liftNo: 999, bindingStatus: '-1' }),
     );
     expect(bindingRepository.save).not.toHaveBeenCalled();
@@ -151,7 +151,7 @@ describe('DeviceService bindings', () => {
 
     expect(response.errcode).toBe(1);
     expect(response.errmsg).toBe('NOT_AUTHORIZED');
-    expect(response.result).toEqual(
+    expect(response.result).toContainEqual(
       expect.objectContaining({ liftNo: 999, bindingStatus: '-1' }),
     );
     expect(bindingRepository.save).not.toHaveBeenCalled();

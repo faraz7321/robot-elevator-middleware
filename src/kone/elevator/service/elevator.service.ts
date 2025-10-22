@@ -128,7 +128,7 @@ export class ElevatorService {
 
   private lockFloorCache: Map<
     string,
-    { fromFloor: number; toFloor: number; updatedAt: number }
+    { fromFloor: number; toFloor: number; locked: boolean; updatedAt: number }
   > = new Map();
 
   private getDoorCtxKey(
@@ -752,6 +752,11 @@ export class ElevatorService {
       groupId,
     );
     const response = new LiftStatusResponseDTO();
+    const lockCtxKey = this.getLockCtxKey(
+      request.deviceUuid,
+      request.placeId,
+      request.liftNo,
+    );
 
     try {
       const cacheKey = `${buildingId}|${groupId}`;
@@ -902,6 +907,7 @@ export class ElevatorService {
         liftNo: request.liftNo,
         floor,
         state: moving,
+        locked: Boolean(this.lockFloorCache.get(lockCtxKey)?.locked),
         prevDirection: direction,
         liftDoorStatus: doorState,
         mode: modeStr || cache.position?.drive_mode || 'UNKNOWN',
@@ -914,6 +920,7 @@ export class ElevatorService {
         liftNo: request.liftNo,
         floor: 0,
         state: 0,
+        locked: Boolean(this.lockFloorCache.get(lockCtxKey)?.locked),
         prevDirection: 0,
         liftDoorStatus: 0,
         mode: 'UNKNOWN',
@@ -1412,8 +1419,6 @@ export class ElevatorService {
         if (callEvent.data?.success) {
           response.errcode = 0;
           response.errmsg = 'SUCCESS';
-          response.sessionId = callEvent.data?.session_id;
-          response.destination = toFloor;
           // Save context for future hold_open calls from the same client
           const liftDeck = Array.isArray(allowedLiftAreaIds)
             ? Number(allowedLiftAreaIds[0])
@@ -1439,9 +1444,6 @@ export class ElevatorService {
           response.errcode = 1;
           response.errmsg = 'FAILURE';
         }
-        response.connectionId = (wsResponse as any)?.connectionId;
-        response.requestId = Number((wsResponse as any)?.requestId);
-        response.statusCode = (wsResponse as any)?.statusCode;
         // Cache successful journey result for idempotency window
         if (response.errcode === 0) {
           this.callIdempotencyCache.set(journeyKey, {
@@ -1727,12 +1729,16 @@ export class ElevatorService {
     );
     const fromFloor = Number(request.fromFloor);
     const toFloor = Number(request.toFloor);
-    if (!isNaN(fromFloor) && !isNaN(toFloor)) {
+    const isLocking = Number(request.locked) === 1;
+    if (isLocking && !isNaN(fromFloor) && !isNaN(toFloor)) {
       this.lockFloorCache.set(lockCtxKey, {
         fromFloor,
         toFloor,
+        locked: true,
         updatedAt: Date.now(),
       });
+    } else if (!isLocking) {
+      this.lockFloorCache.delete(lockCtxKey);
     }
     const skipResCall = process.env.SKIP_RES_CALL || 'true';
     if(skipResCall == 'true'){

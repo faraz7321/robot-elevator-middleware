@@ -1,0 +1,613 @@
+第三方设备接入开放平台接口
+1 第三方设备接入流程介绍
+该部分主要介绍常用业务流程。
+
+1.1 第三方使用电梯前置环节
+
+1.2 第三方使用电梯流程
+
+1
+
+2 接口公共参数
+该部分为安全校验相关的公共参数。
+参数名
+
+含义
+
+计算方法
+
+备注
+
+sign
+
+请求签名
+
+参见公共参数文档
+
+无
+
+ts
+
+时间戳（毫秒）
+
+同上
+
+同上
+
+check
+
+设备安全签名
+
+md5(deviceUuid + "|"+ ts +"|"+ deviceSecret)
+
+32位小写hex
+
+3 接入基础接口
+该部分为第三方设备使用IOT设施(如电梯)基础接口,涉及绑定授权等。
+
+名称
+
+接口名
+
+调用频率限制
+
+补充
+
+设备注册接口
+
+/openapi/v5/device/register
+
+对同一台机器人的调用间隔不
+低于5s
+
+正常情况下1到2s左右
+的 延时
+
+/openapi/v5/device/binding
+
+同上
+
+同上
+
+设备绑定电梯接口
+设备取消绑定电梯接口
+
+同上
+
+/openapi/v5/device/unbinding
+
+同上
+
+3.1 设备注册接口
+第三方注册设备信息
+POST /openapi/v5/device/register
+ContentType: application/json
+
+参数：
+参数
+
+类型
+
+含义
+
+deviceMac
+
+String
+
+必填，第三方设备mac地址，12位hex大写字符，同一地点下唯一。
+
+deviceUuid
+
+String
+
+必填，第三方设备唯一编码，24位hex大写字符，全球唯一码，用于近场通信鉴，必须全局唯一
+1
+
+入参示例：
+{
+"deviceUuid": "010203040506070809101115",
+"appname": "tbrooker@yunji.ai.com",
+"sign": "c529b386bf631adc56a8205fc3b9f268",
+"deviceMac": "112233445575",
+"ts": 1676031922334
+
+}
+
+返回值：
+{
+"errcode": 0, // 0 : 调用成功；其它：调用失败
+"errmsg":"SUCCESS",
+"result":
+{
+"deviceMac ": "1122334455AB",
+"deviceUuid": "AB0203040506070809101112",
+"deviceSecret": "010203040506070809101112" // 设备密钥, 用于计算check参数
+}
+}
+
+3.2 设备绑定电梯接口
+第三方设备绑定电梯接口
+POST /openapi/v5/device/binding
+ContentType:application/json
+
+参数：
+参数
+
+类型
+
+含义
+
+deviceUuid
+
+String
+
+必填，第三方设备唯一编码
+
+placeId
+
+String
+
+必填，绑定地点ID
+
+liftNos
+
+int[]
+
+选填,电梯编号。为空，绑定该地点下有权限访问的所有电梯； 不为空，绑定某个电梯
+
+1
+
+入参示例：
+{
+"deviceUuid": "010203040506070809101111",
+"appname": "tbrooker@yunji.ai.com",
+"liftNos": [],
+"placeId": "625c45c78ec3445b8b17bfc8d628cbb8",
+"sign": "f56ac91ea9682a64c253ea6d9d53fcd3",
+"check": "3f2a65abe374d1571973454f436f13a4",
+"ts": 1676031973907
+
+}
+
+返回值：
+{
+"errcode": 0,
+
+// 0 : 调用成功；其它：调用失败
+
+"errmsg": "SUCCESS",
+"result": [
+{
+"deviceMac ": "1122334455AB",
+
+//非必须
+
+"deviceUuid": "AB0203040506070809101112", //非必须
+"bindingStatus": "01", // 00 未绑定， 01 绑定中，10 解绑中， 11 已绑定
+"liftNo": 258742
+}
+]
+}
+
+3.3 设备取消绑定电梯接口
+第三方设备取消绑定授权。
+POST /openapi/v5/device/unbinding
+ContentType: application/json
+
+参数：
+参数
+
+类型
+
+含义
+
+deviceUuid
+
+String
+
+必填，第三方设备唯一编码
+
+placeId
+
+String
+
+必填，绑定地点ID
+
+liftNos
+
+int[]
+
+选填, 不为空时解绑某个电梯
+
+1
+
+入参示例：
+{
+"deviceUuid": "010203040506070809101111",
+"appname": "tbrooker@yunji.ai.com",
+"liftNos": [],
+"placeId": "625c45c78ec3445b8b17bfc8d628cbb8",
+"sign": "9bb96d521a9addaefbd6f115fa5b7d8d",
+"check": "d4b65db307f0632d5e6761bf869d4385",
+"ts": 1676032023586
+
+}
+
+返回值：
+{
+
+"errcode": 0,
+// 0 : 调用成功；其它：调用失败
+"errmsg": "SUCCESS",
+"result": [
+{
+"deviceMac ": "1122334455AB", //非必须
+
+}
+
+]
+
+}
+
+"deviceUuid": "AB0203040506070809101112", //非必须
+"bindingStatus": "01", // 00 未绑定， 01 绑定中，10 解绑中， 11 已绑定
+"liftNo": 258742
+
+4 电梯业务接口
+该部分为第三方设备使用电梯业务接口。
+名称
+
+接口名
+
+调用频率限制
+
+补充
+
+设备绑定电梯列表接口
+
+/openapi/v5/lift/list
+
+对同一台机器人的调用间隔不
+低于5s
+
+正常 情况下1到2s左右
+的延时
+
+电梯状态查询接口
+
+/openapi/v5/lift/status
+
+同上
+
+同上
+
+呼叫电梯接口
+
+/openapi/v5/lift/call
+
+同上
+
+同上
+
+延迟开/关门接口
+
+/openapi/v5/lift/open
+
+同上
+
+同上
+
+预约/取消预约接口
+
+/openapi/v5/lift/lock
+
+同上
+
+同上
+
+1
+
+4.1 设备绑定电梯列表接口
+设备绑定电梯列表接口。
+POST /openapi/v5/lift/list
+ContentType: application/json
+
+参数：
+参数
+
+类型
+
+含义
+
+deviceUuid
+
+String
+
+必填，第三方设备唯一编码
+
+placeId
+
+String
+
+必填，绑定地点ID
+
+入参示例：
+{
+"deviceUuid": "010203040506070809101111",
+"appname": "tbrooker@yunji.ai.com",
+"placeId": "625c45c78ec3445b8b17bfc8d628cbb8",
+"sign": "ad1765a23d5847916fdb9c2593fc8fce",
+"check": "6434e1ce047d7c090f0f49145f2bff78",
+"ts": 1676032062685
+
+}
+
+返回值：
+{
+"errcode": 0, // 0 : 调用成功；其它：调用失败
+"errmsg": "SUCCESS",
+"result": [
+{
+"liftNo": 258742,
+"accessibleFloors": "1,2,3,4,5,6,7,8,12,14,15,634",
+"bindingStatus": "01"
+},
+{
+"liftNo": 123,
+"accessibleFloors": "[]",
+"bindingStatus": "-1"
+
+// 00 未绑定， 01 绑定中，10 解绑中， 11 已绑定，-1 未赋权
+
+}
+]
+}
+1
+
+4.2 电梯状态接口
+电梯状态查询接口。
+POST /openapi/v5/lift/status
+ContentType: application/json
+
+参数：
+参数
+
+类型
+
+含义
+
+deviceUuid
+
+String
+
+必填，第三方设备唯一编码
+
+placeId
+
+String
+
+必填，绑定地点ID
+
+liftNo
+
+int
+
+必填， 电梯序号
+
+入参示例：
+{
+"deviceUuid": "010203040506070809101111",
+"appname": "tbrooker@yunji.ai.com",
+"placeId": "625c45c78ec3445b8b17bfc8d628cbb8",
+"sign": "b461846c9fdbe8b0cae81a6649b6bd79",
+"check": "1cb21c6cbdb429c65dcac0386be66c91",
+"liftNo": 1,
+"ts": 1676032104815
+
+}
+
+返回值：
+{
+"errcode": 0, // 0 : 调用成功；其它：调用失败
+"errmsg": "SUCCESS",
+"result":{
+"liftNo": 17244, // 电梯序号
+"floor": 5,
+
+// 所在楼层
+
+"state": 0, // 0 不可用，1 可用
+"locked": false, //[预留] 0 未占用，1占用
+"prevDirection": 2, // 0未知，1上行，2下行，3不可用字段
+"liftDoorStatus": 2 // 0未知，1打开，2关闭，3不可用字段
+}
+}
+1
+
+4.3 呼叫电梯接口
+呼叫电梯接口。
+POST /openapi/v5/lift/call
+ContentType: application/json
+
+参数：
+参数
+
+类型
+
+含义
+
+deviceUuid
+
+String
+
+必填，第三方设备唯一编码
+
+placeId
+
+String
+
+必填，绑定地点ID
+
+liftNo
+
+int
+
+必填， 电梯序号
+
+toFloor
+
+int
+
+必填， 目标楼层
+
+入参示例：
+{
+"deviceUuid": "010203040506070809101111",
+"appname": "tbrooker@yunji.ai.com",
+"placeId": "625c45c78ec3445b8b17bfc8d628cbb8",
+"toFloor": 40,
+"sign": "2926e9480eccb61803014a0e0aa64070",
+"check": "210ca2c6c61dbdaaf2afdf82b7d0f22a",
+"liftNo": 1,
+"ts": 1676032140387
+
+}
+
+返回值：
+{
+"errcode": 0, // 0 : 调用成功；其它：调用失败
+"errmsg": "SUCCESS"
+}
+
+1
+
+4.4 延迟开/关门接口
+延迟开/关门接口。
+POST /openapi/v5/lift/open
+ContentType: application/json
+
+参数：
+参数
+
+类型
+
+含义
+
+deviceUuid
+
+String
+
+必填，第三方设备唯一编码
+
+placeId
+
+String
+
+必填，绑定地点ID
+
+liftNo
+
+int
+
+必填， 电梯序号
+
+seconds
+
+int
+
+必填，延迟秒数。0：立马关门(最新版支持)；非零，延迟 seconds后关门；取值范围[0,9]秒；
+
+入参示例：
+{
+"deviceUuid": "010203040506070809101111",
+"seconds": 9,
+"appname": "tbrooker@yunji.ai.com",
+"placeId": "625c45c78ec3445b8b17bfc8d628cbb8",
+"sign": "1265e993603aca8dcee2eb4a1d853acd",
+"check": "477b0c17e4839ccb079f7cc3af6d7b42",
+"liftNo": 1,
+"ts": 1676032184645
+
+}
+
+返回值：
+{
+
+"errcode": 0, // 0 : 调用成功；其它：调用失败
+"errmsg": "SUCCESS"
+
+}
+
+1
+
+4.4 预约/取消预约接口
+预约/取消预约接口
+POST /openapi/v5/lift/lock
+ContentType: application/json
+
+参数：
+参数
+
+类型
+
+含义
+
+deviceUuid
+
+String
+
+必填，第三方设备唯一编码
+
+placeId
+
+String
+
+必填，绑定地点ID
+
+liftNo
+
+int
+
+必填， 电梯序号
+
+fromFloor
+
+int
+
+必填， 起始楼层
+
+toFloor
+
+int
+
+必填， 目标楼层
+
+locked
+
+int
+
+必填，预约操作。0 取消预约，1 预约
+
+入参示例：
+{
+"deviceUuid": "010203040506070809101111",
+"appname": "tbrooker@yunji.ai.com",
+"placeId": "625c45c78ec3445b8b17bfc8d628cbb8",
+"toFloor": 10,
+"sign": "c28fff4bbc54b2895b80dff9328cbfb5",
+"fromFloor": 1,
+"check": "2b5f0876bcdccbc3d6878872a3b30923",
+"locked": 0,
+"liftNo": 1,
+"ts": 1676032219895
+}
+
+返回值：
+{
+"errcode": 0, // 0 : 调用成功；其它：调用失败
+"errmsg": "SUCCESS"
+}
+
+1
+
+

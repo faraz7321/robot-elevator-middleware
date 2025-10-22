@@ -110,7 +110,7 @@ describe('ElevatorService callElevator', () => {
     });
   });
 
-  it('returns session id and destination when operational', async () => {
+  it('returns success response when operational', async () => {
     const req = new CallElevatorRequestDTO();
     req.placeId = 'b1';
     req.liftNo = 1;
@@ -122,10 +122,7 @@ describe('ElevatorService callElevator', () => {
     const res = await service.callElevator(req);
 
     expect(res.errcode).toBe(0);
-    expect(res.sessionId).toBe(99);
-    expect(res.destination).toBe(5);
-    expect(res.connectionId).toBe('conn-123');
-    expect(res.requestId).toBe(123);
+    expect(res.errmsg).toBe('SUCCESS');
     const sendCalls = (openWebSocketConnection as jest.Mock).mock.results[0]
       .value.send.mock.calls.map((c) => JSON.parse(c[0]));
     const actionPayload = sendCalls.find((p: any) => p?.callType === 'action');
@@ -146,7 +143,7 @@ describe('ElevatorService callElevator', () => {
     const res = await service.callElevator(req);
 
     expect(res.errcode).toBe(0);
-    expect(res.destination).toBe(6);
+    expect(res.errmsg).toBe('SUCCESS');
 
     const wsMock = openWebSocketConnection as jest.Mock;
     const ws = wsMock.mock.results[wsMock.mock.results.length - 1].value;
@@ -455,6 +452,7 @@ describe('ElevatorService getLiftStatus', () => {
       liftNo: 1,
       floor: 5,
       state: 1,
+      locked: false,
       prevDirection: 1,
       liftDoorStatus: 1,
       mode: 'NOR',
