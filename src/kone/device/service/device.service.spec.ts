@@ -1,35 +1,24 @@
 import { DeviceService } from './device.service';
 import { BindDeviceResponseDTO } from '../dto/bind/BindDeviceResponseDTO';
 import { BindDeviceResultDTO } from '../dto/bind/BindDeviceResultDTO';
-import { fetchBuildingTopology } from '../../common/koneapi';
-
-jest.mock('../../common/koneapi', () => ({
-  fetchBuildingTopology: jest.fn(),
-}));
+import { DeviceRegistryService } from './device-registry.service';
+import { DeviceBindingService } from './device-binding.service';
+import { LiftAuthorizationService } from './lift-authorization.service';
+import { DeviceBindingRepository } from '../repository/device-binding.repository';
 
 describe('DeviceService bindings', () => {
   let service: DeviceService;
-  const accessTokenService = {
-    getAccessToken: jest.fn().mockResolvedValue('token'),
-  } as any;
-  const registryRepository = {} as any;
-  const bindingRepository = {
-    findByUuid: jest.fn(),
-    save: jest.fn(),
-  } as any;
+  let deviceRegistryService: jest.Mocked<DeviceRegistryService>;
+  let deviceBindingService: DeviceBindingService;
+  let liftAuthorizationService: jest.Mocked<LiftAuthorizationService>;
+  let bindingRepository: jest.Mocked<DeviceBindingRepository>;
 
   beforeEach(() => {
-    (fetchBuildingTopology as jest.Mock).mockResolvedValue({
-      groups: [
-        {
-          groupId: 'group:123:1',
-          lifts: [{ liftId: 'lift:123:1:1' }, { liftId: 'lift:123:1:2' }],
-        },
-      ],
-    });
-    accessTokenService.getAccessToken.mockClear();
-    bindingRepository.findByUuid.mockClear();
-    bindingRepository.save.mockClear();
+    bindingRepository = {
+      findByUuid: jest.fn(),
+      save: jest.fn(),
+    } as unknown as jest.Mocked<DeviceBindingRepository>;
+
     bindingRepository.findByUuid.mockResolvedValue(null);
     bindingRepository.save.mockResolvedValue({
       deviceUuid: '123456789012345678901234',
@@ -37,10 +26,30 @@ describe('DeviceService bindings', () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
+
+    deviceBindingService = new DeviceBindingService(bindingRepository);
+
+    deviceRegistryService = {
+      registerDevice: jest.fn(),
+      getDeviceSecret: jest.fn(),
+      isDeviceBound: jest.fn(),
+      getBoundLifts: jest.fn(),
+      findByUuid: jest.fn(),
+      findByMac: jest.fn(),
+      getIdentity: jest.fn().mockResolvedValue({
+        deviceUuid: '123456789012345678901234',
+        deviceMac: '112233445566',
+      }),
+    } as unknown as jest.Mocked<DeviceRegistryService>;
+
+    liftAuthorizationService = {
+      getAuthorizedLiftNumbers: jest.fn().mockResolvedValue(new Set([1, 2])),
+    } as unknown as jest.Mocked<LiftAuthorizationService>;
+
     service = new DeviceService(
-      registryRepository,
-      bindingRepository,
-      accessTokenService,
+      deviceRegistryService,
+      deviceBindingService,
+      liftAuthorizationService,
     );
   });
 

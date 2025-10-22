@@ -1,19 +1,18 @@
 import * as crypto from 'crypto';
 import { UnauthorizedException } from '@nestjs/common';
-import * as dotenv from 'dotenv';
 import { appLogger } from '../../logger/gcp-logger.service';
-
-dotenv.config();
+import { environment } from '../../core/config/environment';
 
 const logger = appLogger.forContext('SignatureVerifier');
 function md5(str: string): string {
   return crypto.createHash('md5').update(str).digest('hex');
 }
 
-const ELEVATOR_APP_NAME = process.env.ELEVATOR_APP_NAME || '';
-const ELEVATOR_APP_SECRET = process.env.ELEVATOR_APP_SECRET || '';
-const DISABLE_SIGNATURE_VALIDATION =
-  (process.env.DISABLE_SIGNATURE_VALIDATION || '').toLowerCase() === 'true';
+const {
+  elevatorAppName: ELEVATOR_APP_NAME,
+  elevatorAppSecret: ELEVATOR_APP_SECRET,
+  disableSignatureValidation: DISABLE_SIGNATURE_VALIDATION,
+} = environment.kone;
 
 export function generateCheck(
   deviceUuid: string,

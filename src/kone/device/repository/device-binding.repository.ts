@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Datastore, Key } from '@google-cloud/datastore';
 import { appLogger } from '../../../logger/gcp-logger.service';
+import { EnvironmentService } from '../../../core/config/environment.service';
 
 export interface DeviceBindingRecord {
   deviceUuid: string;
@@ -15,22 +16,22 @@ export class DeviceBindingRepository {
   private readonly datastore: Datastore;
   private readonly kind: string;
 
-  constructor() {
-    const projectId =
-      process.env.GCP_PROJECT_ID ||
-      process.env.GCLOUD_PROJECT ||
-      process.env.GOOGLE_CLOUD_PROJECT;
-
-    const options: ConstructorParameters<typeof Datastore>[0] = {};
-    if (projectId) {
-      options.projectId = projectId;
-    }
-
+  constructor(private readonly environmentService: EnvironmentService) {
+    const options = this.buildDatastoreOptions();
     this.datastore = new Datastore(options);
     this.kind =
       process.env.DEVICE_BINDING_COLLECTION ||
       process.env.DEVICE_BINDINGS_COLLECTION ||
       'deviceBindings';
+  }
+
+  private buildDatastoreOptions(): ConstructorParameters<typeof Datastore>[0] {
+    const projectId = this.environmentService.gcpProjectId;
+    const options: ConstructorParameters<typeof Datastore>[0] = {};
+    if (projectId) {
+      options.projectId = projectId;
+    }
+    return options;
   }
 
   private mapEntity(

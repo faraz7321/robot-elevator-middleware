@@ -5,27 +5,30 @@ import {
 } from '../../common/koneapi';
 import { BUILDING_ID_PREFIX } from '../../common/types';
 import { AccessTokenData } from '../dto/AccessTokenData';
+import { EnvironmentService } from '../../../core/config/environment.service';
 
 @Injectable()
 export class AccessTokenService {
-  private KONE_CLIENT_ID: string =
-    process.env.KONE_CLIENT_ID || 'YOUR_CLIENT_ID';
-  private KONE_CLIENT_SECRET: string =
-    process.env.KONE_CLIENT_SECRET || 'YOUR_CLIENT_SECRET';
-
   private scopeToTokenMap: Map<string, AccessTokenData> = new Map<
     string,
     AccessTokenData
   >();
 
+  constructor(private readonly environmentService: EnvironmentService) {}
+
+  private get clientId(): string {
+    return this.environmentService.koneClientId;
+  }
+
+  private get clientSecret(): string {
+    return this.environmentService.koneClientSecret;
+  }
+
   async getAccessToken(
     buildingId: string,
     groupId: string = '1',
   ): Promise<string> {
-    validateClientIdAndClientSecret(
-      this.KONE_CLIENT_ID,
-      this.KONE_CLIENT_SECRET,
-    );
+    validateClientIdAndClientSecret(this.clientId, this.clientSecret);
     const scopes = this.getScopes(buildingId, groupId);
     const existingAccessToken: AccessTokenData | undefined =
       this.scopeToTokenMap.get(scopes.join(' '));
@@ -36,8 +39,8 @@ export class AccessTokenService {
 
     // if token not cached or expired
     const accessTokenData = await fetchAccessToken(
-      this.KONE_CLIENT_ID,
-      this.KONE_CLIENT_SECRET,
+      this.clientId,
+      this.clientSecret,
       scopes,
     ); // returns expires_in, not expires_at so we need a separate dto to store that
     const token = new AccessTokenData(
