@@ -1419,6 +1419,8 @@ export class ElevatorService {
         if (callEvent.data?.success) {
           response.errcode = 0;
           response.errmsg = 'SUCCESS';
+          response.sessionId = callEvent.data?.session_id;
+          response.destination = toFloor;
           // Save context for future hold_open calls from the same client
           const liftDeck = Array.isArray(allowedLiftAreaIds)
             ? Number(allowedLiftAreaIds[0])
@@ -1444,6 +1446,9 @@ export class ElevatorService {
           response.errcode = 1;
           response.errmsg = 'FAILURE';
         }
+        response.connectionId = (wsResponse as any)?.connectionId;
+        response.requestId = Number((wsResponse as any)?.requestId);
+        response.statusCode = (wsResponse as any)?.statusCode;
         // Cache successful journey result for idempotency window
         if (response.errcode === 0) {
           this.callIdempotencyCache.set(journeyKey, {
