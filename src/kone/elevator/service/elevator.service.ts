@@ -119,7 +119,6 @@ export class ElevatorService {
       groupId: string;
       servedArea: number;
       liftDeck: number;
-      terminalId?: number;
       endAtMs: number; // when we plan to stop extending (client request horizon)
       timer?: NodeJS.Timeout;
       active: boolean;
@@ -1506,26 +1505,14 @@ export class ElevatorService {
       );
       let servedArea = 0;
       let liftDeck = 0;
-      let terminalId: number | undefined;
       const saved = this.lastDoorHoldContext.get(ctxKey);
       if (saved) {
         servedArea = saved.servedArea || 0;
         liftDeck = saved.liftDeck || 0;
-        terminalId = saved.terminalId;
       }
       if (!servedArea || !liftDeck) {
         // Derive from topology if not found (best-effort)
         try {
-          // Hardcode preferred terminal type order for door-hold as well
-          const preferredTypes = ['virtual', 'lcs', 'vcs'];
-          const virtualTerminalId = this.pickTerminalId(
-            buildingId,
-            targetGroupId,
-            topology,
-            (topology as any)?.groups?.[0]?.terminals,
-            preferredTypes.length ? preferredTypes : undefined,
-          );
-          terminalId = terminalId || virtualTerminalId;
           // Source floor is unknown at this point; try to resolve by current floor 0 mapping as last resort
           // Prefer mapping rule for a plausible area
           servedArea =
@@ -1544,20 +1531,36 @@ export class ElevatorService {
         } catch {}
       }
 
-      logOutgoing('kone hold_open context', {
-        deviceUuid: request.deviceUuid,
-        buildingId,
-        groupId: targetGroupId,
-        liftNo: request.liftNo,
-        served_area: servedArea,
-        lift_deck: liftDeck,
-        //terminal: terminalId ?? 1,
-        source: saved ? 'saved' : 'derived',
-      });
-      const requestedSeconds = Math.max(0, Math.floor(Number(request.seconds) || 0));
+      const rawSeconds = Math.max(0, Math.floor(Number(request.seconds) || 0));
+      const requestTs = Number(request.ts);
+      const nowMs = Date.now();
+      const requestMs = !isNaN(requestTs)
+        ? requestTs > 1e12
+          ? requestTs
+          : requestTs * 1000
+        : NaN;
+      const drift =
+        !isNaN(requestMs) && requestMs > 0 ? (nowMs - requestMs) / 1000 : 0;
+      const requestedSeconds = Math.max(
+        0,
+        drift > 0 ? rawSeconds - Math.floor(drift) : rawSeconds,
+      );
 
       // If there is an existing task for this client+lift, update or cancel it
       const existing = this.doorHoldTasks.get(ctxKey);
+      if (existing) {
+        if (!servedArea && existing.servedArea) {
+          servedArea = existing.servedArea;
+        }
+        if (!liftDeck && existing.liftDeck) {
+          liftDeck = existing.liftDeck;
+        }
+      }
+      if (!servedArea || !liftDeck) {
+        response.errcode = 1;
+        response.errmsg = 'MISSING_DOOR_CONTEXT';
+        return response;
+      }
 
       // Helper to open or ensure connection
       const ensureConnection = async (): Promise<WebSocket> => {
@@ -1613,6 +1616,8 @@ export class ElevatorService {
         // If a task exists, just extend or shorten the end time
         if (existing && existing.active) {
           existing.endAtMs = Date.now() + requestedSeconds * 1000;
+          if (!isNaN(servedArea)) existing.servedArea = servedArea;
+          if (!isNaN(liftDeck)) existing.liftDeck = liftDeck;
           response.errcode = 0;
           response.errmsg = 'SUCCESS';
           return;
@@ -1626,7 +1631,6 @@ export class ElevatorService {
           groupId: targetGroupId,
           servedArea,
           liftDeck,
-          terminalId,
           endAtMs: Date.now() + requestedSeconds * 1000,
           timer: undefined as unknown as NodeJS.Timeout | undefined,
           active: true,
