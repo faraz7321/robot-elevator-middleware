@@ -12,7 +12,7 @@ export class DelayDoorRequestDTO extends ElevatorBaseRequest {
   @IsNumber()
   @IsNotEmpty()
   @Min(0)
-  @Max(9)
+  @Max(300)
   seconds: number;
 
   @IsNumber()
